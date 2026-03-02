@@ -11,7 +11,6 @@ import com.smartfolder.domain.repository.EmbeddingRepository
 import com.smartfolder.domain.repository.FolderRepository
 import com.smartfolder.domain.repository.ImageRepository
 import com.smartfolder.ml.BitmapLoader
-import com.smartfolder.ml.EmbeddingNormalizer
 import com.smartfolder.ml.ImageEmbedderWrapper
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -29,6 +28,17 @@ class IndexFolderUseCase @Inject constructor(
         emit(IndexingProgress(phase = IndexingPhase.LISTING_FILES))
 
         try {
+            // Verify SAF permission is still valid
+            if (!safManager.hasPersistedPermission(folder.uri)) {
+                emit(
+                    IndexingProgress(
+                        phase = IndexingPhase.ERROR,
+                        errorMessage = "Folder access was revoked. Please re-select the folder."
+                    )
+                )
+                return@flow
+            }
+
             // Initialize embedder
             imageEmbedder.initialize(modelChoice.modelFileName)
 
@@ -72,6 +82,7 @@ class IndexFolderUseCase @Inject constructor(
             emit(IndexingProgress(phase = IndexingPhase.EMBEDDING, total = total))
 
             var indexed = 0
+            var failed = 0
             for (image in dbImages) {
                 // Check if embedding already exists with correct model
                 val existingEmbedding = embeddingRepository.getByImageId(image.id)
@@ -91,43 +102,54 @@ class IndexFolderUseCase @Inject constructor(
                 // Load bitmap and compute embedding
                 val bitmap = bitmapLoader.loadForEmbedding(image.uri)
                 if (bitmap != null) {
+                    // MediaPipe ImageEmbedder already L2-normalizes with setL2Normalize(true)
                     val vector = imageEmbedder.embed(bitmap)
                     bitmap.recycle()
 
                     if (vector != null) {
-                        val normalized = EmbeddingNormalizer.normalize(vector)
                         val embedding = Embedding(
                             imageId = image.id,
-                            vector = normalized,
+                            vector = vector,
                             modelName = modelChoice.modelFileName
                         )
-                        // Delete old embedding if exists
                         existingEmbedding?.let { embeddingRepository.delete(it) }
                         embeddingRepository.insert(embedding)
+                    } else {
+                        failed++
                     }
+                } else {
+                    failed++
                 }
 
                 indexed++
+                val statusSuffix = if (failed > 0) " ($failed failed)" else ""
                 emit(
                     IndexingProgress(
                         phase = IndexingPhase.EMBEDDING,
                         current = indexed,
                         total = total,
-                        currentFileName = image.displayName
+                        currentFileName = image.displayName + statusSuffix
                     )
                 )
             }
 
-            // Update folder
+            // Update folder with successful count
+            val successCount = indexed - failed
             folderRepository.update(
                 folder.copy(
-                    indexedCount = indexed,
+                    indexedCount = successCount,
                     imageCount = total,
                     lastIndexedAt = System.currentTimeMillis()
                 )
             )
 
-            emit(IndexingProgress(phase = IndexingPhase.COMPLETE, current = total, total = total))
+            val completeMessage = if (failed > 0) "$failed image(s) could not be processed" else ""
+            emit(IndexingProgress(
+                phase = IndexingPhase.COMPLETE,
+                current = total,
+                total = total,
+                currentFileName = completeMessage
+            ))
         } catch (e: Exception) {
             emit(
                 IndexingProgress(

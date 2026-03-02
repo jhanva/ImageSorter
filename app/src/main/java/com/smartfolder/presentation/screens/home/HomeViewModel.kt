@@ -3,6 +3,7 @@ package com.smartfolder.presentation.screens.home
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.smartfolder.data.saf.SafManager
 import com.smartfolder.domain.model.FolderRole
 import com.smartfolder.domain.model.IndexingPhase
 import com.smartfolder.domain.model.ModelChoice
@@ -23,7 +24,8 @@ class HomeViewModel @Inject constructor(
     private val selectFolderUseCase: SelectFolderUseCase,
     private val indexFolderUseCase: IndexFolderUseCase,
     private val folderRepository: FolderRepository,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val safManager: SafManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -42,12 +44,36 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             val refFolders = folderRepository.getByRole(FolderRole.REFERENCE)
             val unsortedFolders = folderRepository.getByRole(FolderRole.UNSORTED)
+
+            val refFolder = refFolders.firstOrNull()
+            val unsortedFolder = unsortedFolders.firstOrNull()
+
+            // Check if SAF permissions are still valid
+            val refPermissionLost = refFolder != null &&
+                    !safManager.hasPersistedPermission(refFolder.uri)
+            val unsortedPermissionLost = unsortedFolder != null &&
+                    !safManager.hasPersistedPermission(unsortedFolder.uri)
+
             _uiState.value = _uiState.value.copy(
-                referenceFolder = refFolders.firstOrNull(),
-                unsortedFolder = unsortedFolders.firstOrNull(),
-                canAnalyze = refFolders.firstOrNull()?.indexedCount?.let { it > 0 } == true
-                        && unsortedFolders.firstOrNull()?.indexedCount?.let { it > 0 } == true
+                referenceFolder = if (refPermissionLost) null else refFolder,
+                unsortedFolder = if (unsortedPermissionLost) null else unsortedFolder,
+                canAnalyze = !refPermissionLost && !unsortedPermissionLost
+                        && refFolder?.indexedCount?.let { it > 0 } == true
+                        && unsortedFolder?.indexedCount?.let { it > 0 } == true,
+                error = when {
+                    refPermissionLost && unsortedPermissionLost ->
+                        "Access to both folders was revoked. Please re-select them."
+                    refPermissionLost ->
+                        "Access to reference folder was revoked. Please re-select it."
+                    unsortedPermissionLost ->
+                        "Access to unsorted folder was revoked. Please re-select it."
+                    else -> null
+                }
             )
+
+            // Clean up folders with lost permissions
+            if (refPermissionLost && refFolder != null) folderRepository.delete(refFolder)
+            if (unsortedPermissionLost && unsortedFolder != null) folderRepository.delete(unsortedFolder)
         }
     }
 

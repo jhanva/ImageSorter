@@ -9,6 +9,7 @@ import com.google.mediapipe.tasks.vision.imageembedder.ImageEmbedder
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -50,17 +51,23 @@ class ImageEmbedderWrapper @Inject constructor(
         currentModelName = modelFileName
     }
 
+    companion object {
+        private const val EMBED_TIMEOUT_MS = 30_000L
+    }
+
     suspend fun embed(bitmap: Bitmap): FloatArray? = mutex.withLock {
         val embedderInstance = embedder ?: return@withLock null
-        return@withLock try {
-            val mpImage = BitmapImageBuilder(bitmap).build()
-            val result = embedderInstance.embed(mpImage)
-            val embedding = result.embeddingResult().embeddings().firstOrNull()
-            embedding?.floatEmbedding()?.let { list ->
-                FloatArray(list.size) { list[it] }
+        return@withLock withTimeoutOrNull(EMBED_TIMEOUT_MS) {
+            try {
+                val mpImage = BitmapImageBuilder(bitmap).build()
+                val result = embedderInstance.embed(mpImage)
+                val embedding = result.embeddingResult().embeddings().firstOrNull()
+                embedding?.floatEmbedding()?.let { list ->
+                    FloatArray(list.size) { list[it] }
+                }
+            } catch (e: Exception) {
+                null
             }
-        } catch (e: Exception) {
-            null
         }
     }
 

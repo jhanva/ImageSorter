@@ -83,13 +83,26 @@ class AnalyzeImagesUseCase @Inject constructor(
                     continue
                 }
 
-                // Full kNN: compute similarity with all reference images
-                val similarities = refImageVectors.map { (imageId, refVector) ->
-                    imageId to SimilarityCalculator.cosineSimilarity(unsortedEmb.vector, refVector)
-                }.sortedByDescending { it.second }
+                // Partial kNN: find top-K without full sort using a min-heap approach
+                val topKSimilarities = mutableListOf<Pair<Long, Float>>()
+                var minInTopK = Float.MIN_VALUE
+
+                for ((imageId, refVector) in refImageVectors) {
+                    val sim = SimilarityCalculator.cosineSimilarity(unsortedEmb.vector, refVector)
+                    if (topKSimilarities.size < topK) {
+                        topKSimilarities.add(imageId to sim)
+                        if (topKSimilarities.size == topK) {
+                            minInTopK = topKSimilarities.minOf { it.second }
+                        }
+                    } else if (sim > minInTopK) {
+                        val minIdx = topKSimilarities.indexOfFirst { it.second == minInTopK }
+                        topKSimilarities[minIdx] = imageId to sim
+                        minInTopK = topKSimilarities.minOf { it.second }
+                    }
+                }
+                topKSimilarities.sortByDescending { it.second }
 
                 // Top-K score
-                val topKSimilarities = similarities.take(topK)
                 val topKScore = if (topKSimilarities.isNotEmpty()) {
                     topKSimilarities.map { it.second }.average().toFloat()
                 } else {
