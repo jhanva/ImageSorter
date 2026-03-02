@@ -18,6 +18,9 @@ interface ImageDao {
     @Query("SELECT * FROM images WHERE uri = :uri")
     suspend fun getByUri(uri: String): ImageEntity?
 
+    @Query("SELECT * FROM images WHERE uri IN (:uris)")
+    suspend fun getByUris(uris: List<String>): List<ImageEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(image: ImageEntity): Long
 

@@ -5,6 +5,7 @@ import com.smartfolder.domain.model.AnalysisProgress
 import com.smartfolder.domain.model.Folder
 import com.smartfolder.domain.model.ModelChoice
 import com.smartfolder.domain.model.SimilarMatch
+import com.smartfolder.domain.model.ImageInfo
 import com.smartfolder.domain.model.SuggestionItem
 import com.smartfolder.domain.repository.EmbeddingRepository
 import com.smartfolder.domain.repository.ImageRepository
@@ -12,12 +13,18 @@ import com.smartfolder.ml.CentroidCalculator
 import com.smartfolder.ml.SimilarityCalculator
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.yield
 import javax.inject.Inject
 
 class AnalyzeImagesUseCase @Inject constructor(
     private val imageRepository: ImageRepository,
     private val embeddingRepository: EmbeddingRepository
 ) {
+    companion object {
+        // Throttle progress emissions: emit at most every N images
+        private const val PROGRESS_EMIT_INTERVAL = 50
+    }
+
     data class Result(
         val suggestions: List<SuggestionItem>,
         val progress: AnalysisProgress
@@ -64,22 +71,33 @@ class AnalyzeImagesUseCase @Inject constructor(
             // Build imageId -> vector map for reference
             val refImageVectors = refEmbeddings.associate { it.imageId to it.vector }
 
+            val total = unsortedEmbeddings.size
             emit(Result(emptyList(), AnalysisProgress(
                 phase = AnalysisPhase.COMPARING,
-                total = unsortedEmbeddings.size
+                total = total
             )))
 
             val suggestions = mutableListOf<SuggestionItem>()
+            // Pre-cache image lookups for matched images to avoid repeated DB queries
+            val imageCache = mutableMapOf<Long, ImageInfo?>()
 
             for ((index, unsortedEmb) in unsortedEmbeddings.withIndex()) {
+                // Yield periodically for coroutine cooperativeness
+                if (index % PROGRESS_EMIT_INTERVAL == 0) {
+                    yield()
+                }
+
                 // Prefilter: check centroid similarity
                 val centroidScore = SimilarityCalculator.cosineSimilarity(unsortedEmb.vector, centroid)
                 if (centroidScore < threshold * 0.8f) {
-                    emit(Result(suggestions.toList(), AnalysisProgress(
-                        phase = AnalysisPhase.COMPARING,
-                        current = index + 1,
-                        total = unsortedEmbeddings.size
-                    )))
+                    // Throttle progress: only emit every N images or on last item
+                    if (index % PROGRESS_EMIT_INTERVAL == 0 || index == total - 1) {
+                        emit(Result(suggestions.toList(), AnalysisProgress(
+                            phase = AnalysisPhase.COMPARING,
+                            current = index + 1,
+                            total = total
+                        )))
+                    }
                     continue
                 }
 
@@ -112,10 +130,14 @@ class AnalyzeImagesUseCase @Inject constructor(
                 val combinedScore = SimilarityCalculator.computeScore(centroidScore, topKScore)
 
                 if (combinedScore >= threshold) {
-                    val unsortedImage = imageRepository.getById(unsortedEmb.imageId) ?: continue
+                    val unsortedImage = imageCache.getOrPut(unsortedEmb.imageId) {
+                        imageRepository.getById(unsortedEmb.imageId)
+                    } ?: continue
 
                     val topSimilar = topKSimilarities.mapNotNull { (imageId, score) ->
-                        val image = imageRepository.getById(imageId) ?: return@mapNotNull null
+                        val image = imageCache.getOrPut(imageId) {
+                            imageRepository.getById(imageId)
+                        } ?: return@mapNotNull null
                         SimilarMatch(image = image, score = score)
                     }
 
@@ -130,11 +152,14 @@ class AnalyzeImagesUseCase @Inject constructor(
                     )
                 }
 
-                emit(Result(suggestions.toList(), AnalysisProgress(
-                    phase = AnalysisPhase.COMPARING,
-                    current = index + 1,
-                    total = unsortedEmbeddings.size
-                )))
+                // Throttle progress: only emit every N images or on last item
+                if (index % PROGRESS_EMIT_INTERVAL == 0 || index == total - 1) {
+                    emit(Result(suggestions.toList(), AnalysisProgress(
+                        phase = AnalysisPhase.COMPARING,
+                        current = index + 1,
+                        total = total
+                    )))
+                }
             }
 
             // Sort by score descending
@@ -142,8 +167,8 @@ class AnalyzeImagesUseCase @Inject constructor(
 
             emit(Result(sortedSuggestions, AnalysisProgress(
                 phase = AnalysisPhase.COMPLETE,
-                current = unsortedEmbeddings.size,
-                total = unsortedEmbeddings.size
+                current = total,
+                total = total
             )))
         } catch (e: Exception) {
             emit(Result(emptyList(), AnalysisProgress(

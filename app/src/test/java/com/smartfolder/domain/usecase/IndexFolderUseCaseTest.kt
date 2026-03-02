@@ -49,6 +49,7 @@ class IndexFolderUseCaseTest {
     @Test
     fun `empty folder completes immediately`() = runTest {
         val folder = Folder(1L, mockUri, "Empty", FolderRole.REFERENCE)
+        `when`(safManager.hasPersistedPermission(mockUri)).thenReturn(true)
         `when`(safManager.listImageFiles(mockUri)).thenReturn(emptyList())
 
         val results = useCase(folder, ModelChoice.FAST).toList()
@@ -62,12 +63,17 @@ class IndexFolderUseCaseTest {
     fun `folder with images goes through correct phases`() = runTest {
         val folder = Folder(1L, mockUri, "Test", FolderRole.REFERENCE)
         val imageUri = mock(Uri::class.java)
+        `when`(imageUri.toString()).thenReturn("content://test/image.jpg")
         val imageFiles = listOf(
             SafImageFile(imageUri, "test.jpg", 1000L, 100L, "image/jpeg")
         )
 
+        `when`(safManager.hasPersistedPermission(mockUri)).thenReturn(true)
         `when`(safManager.listImageFiles(mockUri)).thenReturn(imageFiles)
-        `when`(imageRepository.getByUri(imageUri.toString())).thenReturn(null)
+        `when`(imageRepository.getByUris(listOf("content://test/image.jpg")))
+            .thenReturn(emptyList())
+        `when`(imageRepository.insertAll(org.mockito.ArgumentMatchers.anyList()))
+            .thenReturn(listOf(1L))
         `when`(imageRepository.getByFolder(1L)).thenReturn(emptyList())
 
         val results = useCase(folder, ModelChoice.FAST).toList()

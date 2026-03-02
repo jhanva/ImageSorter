@@ -8,6 +8,7 @@ interface ImageRepository {
     suspend fun getByFolder(folderId: Long): List<ImageInfo>
     suspend fun getById(id: Long): ImageInfo?
     suspend fun getByUri(uri: String): ImageInfo?
+    suspend fun getByUris(uris: List<String>): List<ImageInfo>
     suspend fun insert(image: ImageInfo): Long
     suspend fun insertAll(images: List<ImageInfo>): List<Long>
     suspend fun update(image: ImageInfo)

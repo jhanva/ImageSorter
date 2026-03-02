@@ -33,6 +33,17 @@ class ImageRepositoryImpl @Inject constructor(
         return imageDao.getByUri(uri)?.toDomain()
     }
 
+    override suspend fun getByUris(uris: List<String>): List<ImageInfo> {
+        // SQLite has a limit of ~999 bind variables; chunk to stay safe
+        return uris.chunked(SQLITE_BIND_LIMIT).flatMap { chunk ->
+            imageDao.getByUris(chunk).map { it.toDomain() }
+        }
+    }
+
+    companion object {
+        private const val SQLITE_BIND_LIMIT = 900
+    }
+
     override suspend fun insert(image: ImageInfo): Long {
         return imageDao.insert(image.toEntity())
     }

@@ -14,6 +14,7 @@ import com.smartfolder.ml.BitmapLoader
 import com.smartfolder.ml.ImageEmbedderWrapper
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.yield
 import javax.inject.Inject
 
 class IndexFolderUseCase @Inject constructor(
@@ -24,6 +25,10 @@ class IndexFolderUseCase @Inject constructor(
     private val bitmapLoader: BitmapLoader,
     private val imageEmbedder: ImageEmbedderWrapper
 ) {
+    companion object {
+        private const val REGISTRATION_BATCH_SIZE = 500
+    }
+
     operator fun invoke(folder: Folder, modelChoice: ModelChoice): Flow<IndexingProgress> = flow {
         emit(IndexingProgress(phase = IndexingPhase.LISTING_FILES))
 
@@ -42,38 +47,15 @@ class IndexFolderUseCase @Inject constructor(
             // Initialize embedder
             imageEmbedder.initialize(modelChoice.modelFileName)
 
-            // List image files from folder
+            // List image files from folder (uses fast ContentResolver query)
             val imageFiles = safManager.listImageFiles(folder.uri)
             if (imageFiles.isEmpty()) {
                 emit(IndexingProgress(phase = IndexingPhase.COMPLETE, total = 0))
                 return@flow
             }
 
-            // Register images in database
-            val images = imageFiles.map { file ->
-                ImageInfo(
-                    folderId = folder.id,
-                    uri = file.uri,
-                    displayName = file.displayName,
-                    contentHash = "${file.sizeBytes}_${file.lastModified}",
-                    sizeBytes = file.sizeBytes,
-                    lastModified = file.lastModified
-                )
-            }
-
-            // Insert or update images
-            for (image in images) {
-                val existing = imageRepository.getByUri(image.uri.toString())
-                if (existing == null) {
-                    imageRepository.insert(image)
-                } else if (existing.contentHash != image.contentHash) {
-                    imageRepository.update(image.copy(id = existing.id))
-                    // Invalidate embedding if content changed
-                    embeddingRepository.getByImageId(existing.id)?.let {
-                        embeddingRepository.delete(it)
-                    }
-                }
-            }
+            // Register images in database using batch operations
+            registerImagesBatch(folder, imageFiles)
 
             // Reload images from DB to get IDs
             val dbImages = imageRepository.getByFolder(folder.id)
@@ -84,6 +66,8 @@ class IndexFolderUseCase @Inject constructor(
             var indexed = 0
             var failed = 0
             for (image in dbImages) {
+                yield() // Allow cancellation between images
+
                 // Check if embedding already exists with correct model
                 val existingEmbedding = embeddingRepository.getByImageId(image.id)
                 if (existingEmbedding != null && existingEmbedding.modelName == modelChoice.modelFileName) {
@@ -157,6 +141,58 @@ class IndexFolderUseCase @Inject constructor(
                     errorMessage = e.message ?: "Unknown error during indexing"
                 )
             )
+        }
+    }
+
+    /**
+     * Batch image registration: uses bulk URI lookup and batch insert
+     * instead of individual getByUri + insert per image (N+1 -> 2 queries per batch).
+     */
+    private suspend fun registerImagesBatch(
+        folder: Folder,
+        imageFiles: List<com.smartfolder.data.saf.SafImageFile>
+    ) {
+        val allImages = imageFiles.map { file ->
+            ImageInfo(
+                folderId = folder.id,
+                uri = file.uri,
+                displayName = file.displayName,
+                contentHash = "${file.sizeBytes}_${file.lastModified}",
+                sizeBytes = file.sizeBytes,
+                lastModified = file.lastModified
+            )
+        }
+
+        // Process in batches to avoid memory pressure
+        for (batch in allImages.chunked(REGISTRATION_BATCH_SIZE)) {
+            yield()
+
+            // Bulk fetch existing images by URI
+            val uris = batch.map { it.uri.toString() }
+            val existing = imageRepository.getByUris(uris)
+            val existingByUri = existing.associateBy { it.uri.toString() }
+
+            // Separate new images from existing
+            val toInsert = mutableListOf<ImageInfo>()
+            for (image in batch) {
+                val uriStr = image.uri.toString()
+                val existingImage = existingByUri[uriStr]
+                if (existingImage == null) {
+                    toInsert.add(image)
+                } else if (existingImage.contentHash != image.contentHash) {
+                    // Content changed: update image and invalidate embedding
+                    imageRepository.update(image.copy(id = existingImage.id))
+                    embeddingRepository.getByImageId(existingImage.id)?.let {
+                        embeddingRepository.delete(it)
+                    }
+                }
+                // If existing and hash matches, skip (already registered)
+            }
+
+            // Batch insert new images
+            if (toInsert.isNotEmpty()) {
+                imageRepository.insertAll(toInsert)
+            }
         }
     }
 }
