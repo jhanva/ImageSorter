@@ -2,6 +2,7 @@ package com.smartfolder.ml
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.util.Log
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.core.Delegate
@@ -19,6 +20,10 @@ import javax.inject.Singleton
 class ImageEmbedderWrapper @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    companion object {
+        private const val TAG = "ImageEmbedderWrapper"
+        private const val EMBED_TIMEOUT_MS = 30_000L
+    }
     @Volatile
     private var embedder: ImageEmbedder? = null
     @Volatile
@@ -38,8 +43,9 @@ class ImageEmbedderWrapper @Inject constructor(
                     .setModelAssetPath("models/$modelFileName")
                     .setDelegate(Delegate.GPU)
                     .build()
+                    .also { Log.i(TAG, "Initialized with GPU delegate") }
             } catch (e: Exception) {
-                // Fallback to CPU if GPU is not available
+                Log.w(TAG, "GPU delegate unavailable, falling back to CPU: ${e.message}")
                 BaseOptions.builder()
                     .setModelAssetPath("models/$modelFileName")
                     .setDelegate(Delegate.CPU)
@@ -58,10 +64,6 @@ class ImageEmbedderWrapper @Inject constructor(
         }
     }
 
-    companion object {
-        private const val EMBED_TIMEOUT_MS = 30_000L
-    }
-
     suspend fun embed(bitmap: Bitmap): FloatArray? {
         // Only hold mutex briefly to get embedder reference
         val embedderInstance = mutex.withLock {
@@ -73,10 +75,14 @@ class ImageEmbedderWrapper @Inject constructor(
             withContext(Dispatchers.IO) {
                 try {
                     val mpImage = BitmapImageBuilder(bitmap).build()
-                    val result = embedderInstance.embed(mpImage)
-                    val embedding = result.embeddingResult().embeddings().firstOrNull()
-                    embedding?.floatEmbedding()?.let { list ->
-                        FloatArray(list.size) { list[it] }
+                    try {
+                        val result = embedderInstance.embed(mpImage)
+                        val embedding = result.embeddingResult().embeddings().firstOrNull()
+                        embedding?.floatEmbedding()?.let { list ->
+                            FloatArray(list.size) { list[it] }
+                        }
+                    } finally {
+                        mpImage.close()
                     }
                 } catch (e: Exception) {
                     null

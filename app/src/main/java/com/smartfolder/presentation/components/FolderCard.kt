@@ -39,7 +39,7 @@ fun FolderCard(
         ) {
             Icon(
                 imageVector = Icons.Default.Folder,
-                contentDescription = null,
+                contentDescription = "Folder",
                 tint = MaterialTheme.colorScheme.primary
             )
             Column(modifier = Modifier.weight(1f)) {

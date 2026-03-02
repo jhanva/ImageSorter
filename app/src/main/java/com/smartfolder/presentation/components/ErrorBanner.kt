@@ -32,7 +32,7 @@ fun ErrorBanner(
         ) {
             Icon(
                 imageVector = Icons.Default.Error,
-                contentDescription = null,
+                contentDescription = "Error",
                 tint = MaterialTheme.colorScheme.error,
                 modifier = Modifier.padding(end = 12.dp)
             )

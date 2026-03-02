@@ -13,9 +13,8 @@ import javax.inject.Singleton
 class SafManager @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    private val imageExtensions = setOf("jpg", "jpeg", "png", "webp", "bmp", "gif")
     private val imageMimeTypes = setOf(
-        "image/jpeg", "image/png", "image/webp", "image/bmp", "image/gif"
+        "image/jpeg", "image/png", "image/webp", "image/bmp", "image/gif", "image/heif", "image/heic"
     )
 
     fun takePersistablePermission(uri: Uri) {
@@ -84,10 +83,8 @@ class SafManager @Inject constructor(
                     val name = cursor.getString(nameCol) ?: continue
                     val mimeType = cursor.getString(mimeCol) ?: continue
 
-                    // Filter by image mime type and extension
+                    // Filter by image mime type (single source of truth)
                     if (mimeType !in imageMimeTypes) continue
-                    val ext = name.substringAfterLast('.', "").lowercase()
-                    if (ext !in imageExtensions) continue
 
                     val docId = cursor.getString(idCol)
                     val fileUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)

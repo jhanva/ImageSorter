@@ -65,13 +65,18 @@ class IndexFolderUseCase @Inject constructor(
 
             emit(IndexingProgress(phase = IndexingPhase.EMBEDDING, total = total))
 
+            // Batch-fetch existing embeddings to avoid N+1 queries
+            val allImageIds = dbImages.map { it.id }
+            val existingEmbeddings = embeddingRepository.getByImageIds(allImageIds)
+            val embeddingsByImageId = existingEmbeddings.associateBy { it.imageId }
+
             var indexed = 0
             var failed = 0
             for (image in dbImages) {
                 yield() // Allow cancellation between images
 
                 // Check if embedding already exists with correct model
-                val existingEmbedding = embeddingRepository.getByImageId(image.id)
+                val existingEmbedding = embeddingsByImageId[image.id]
                 if (existingEmbedding != null && existingEmbedding.modelName == modelChoice.modelFileName) {
                     indexed++
                     emit(
@@ -88,20 +93,21 @@ class IndexFolderUseCase @Inject constructor(
                 // Load bitmap and compute embedding
                 val bitmap = bitmapLoader.loadForEmbedding(image.uri)
                 if (bitmap != null) {
-                    // MediaPipe ImageEmbedder already L2-normalizes with setL2Normalize(true)
-                    val vector = imageEmbedder.embed(bitmap)
-                    bitmap.recycle()
-
-                    if (vector != null) {
-                        val embedding = Embedding(
-                            imageId = image.id,
-                            vector = vector,
-                            modelName = modelChoice.modelFileName
-                        )
-                        existingEmbedding?.let { embeddingRepository.delete(it) }
-                        embeddingRepository.insert(embedding)
-                    } else {
-                        failed++
+                    try {
+                        val vector = imageEmbedder.embed(bitmap)
+                        if (vector != null) {
+                            val embedding = Embedding(
+                                imageId = image.id,
+                                vector = vector,
+                                modelName = modelChoice.modelFileName
+                            )
+                            existingEmbedding?.let { embeddingRepository.delete(it) }
+                            embeddingRepository.insert(embedding)
+                        } else {
+                            failed++
+                        }
+                    } finally {
+                        bitmap.recycle()
                     }
                 } else {
                     failed++

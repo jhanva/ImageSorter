@@ -31,7 +31,7 @@ fun EmptyState(
     ) {
         Icon(
             imageVector = Icons.Default.ImageSearch,
-            contentDescription = null,
+            contentDescription = "No results",
             modifier = Modifier.size(64.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
