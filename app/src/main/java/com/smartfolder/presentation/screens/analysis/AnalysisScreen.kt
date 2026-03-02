@@ -67,7 +67,11 @@ fun AnalysisScreen(
             uiState.error?.let { error ->
                 ErrorBanner(message = error)
                 Spacer(modifier = Modifier.height(16.dp))
-                Button(onClick = onNavigateBack) {
+                Button(onClick = { viewModel.startAnalysis() }) {
+                    Text("Retry")
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(onClick = onNavigateBack) {
                     Text("Go Back")
                 }
             } ?: run {

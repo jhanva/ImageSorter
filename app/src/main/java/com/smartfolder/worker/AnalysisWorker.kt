@@ -2,8 +2,11 @@ package com.smartfolder.worker
 
 import android.content.Context
 import androidx.hilt.work.HiltWorker
+import androidx.work.BackoffPolicy
+import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.Data
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkerParameters
 import com.smartfolder.domain.model.AnalysisPhase
 import com.smartfolder.domain.model.ModelChoice
@@ -13,6 +16,8 @@ import com.smartfolder.domain.usecase.AnalyzeImagesUseCase
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.TimeUnit
 
 @HiltWorker
 class AnalysisWorker @AssistedInject constructor(
@@ -31,6 +36,30 @@ class AnalysisWorker @AssistedInject constructor(
         const val KEY_PROGRESS_CURRENT = "progress_current"
         const val KEY_PROGRESS_TOTAL = "progress_total"
         const val KEY_ERROR_MESSAGE = "error_message"
+        private const val TIMEOUT_MS = 1_800_000L // 30 minutes
+
+        fun buildWorkRequest(
+            refFolderId: Long,
+            unsortedFolderId: Long,
+            modelChoice: ModelChoice
+        ) = OneTimeWorkRequestBuilder<AnalysisWorker>()
+            .setInputData(
+                Data.Builder()
+                    .putLong(KEY_REF_FOLDER_ID, refFolderId)
+                    .putLong(KEY_UNSORTED_FOLDER_ID, unsortedFolderId)
+                    .putString(KEY_MODEL_CHOICE, modelChoice.name)
+                    .build()
+            )
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiresStorageNotLow(true)
+                    .build()
+            )
+            .setBackoffCriteria(
+                BackoffPolicy.EXPONENTIAL,
+                30, TimeUnit.SECONDS
+            )
+            .build()
     }
 
     override suspend fun doWork(): Result {
@@ -62,20 +91,27 @@ class AnalysisWorker @AssistedInject constructor(
         val threshold = settingsRepository.threshold.first()
         var lastPhase = AnalysisPhase.IDLE
 
-        analyzeImagesUseCase(
-            referenceFolder = refFolder,
-            unsortedFolder = unsortedFolder,
-            modelChoice = modelChoice,
-            threshold = threshold
-        ).collect { result ->
-            lastPhase = result.progress.phase
-            setProgress(
-                Data.Builder()
-                    .putString(KEY_PROGRESS_PHASE, result.progress.phase.name)
-                    .putInt(KEY_PROGRESS_CURRENT, result.progress.current)
-                    .putInt(KEY_PROGRESS_TOTAL, result.progress.total)
-                    .build()
-            )
+        val completed = withTimeoutOrNull(TIMEOUT_MS) {
+            analyzeImagesUseCase(
+                referenceFolder = refFolder,
+                unsortedFolder = unsortedFolder,
+                modelChoice = modelChoice,
+                threshold = threshold
+            ).collect { result ->
+                lastPhase = result.progress.phase
+                setProgress(
+                    Data.Builder()
+                        .putString(KEY_PROGRESS_PHASE, result.progress.phase.name)
+                        .putInt(KEY_PROGRESS_CURRENT, result.progress.current)
+                        .putInt(KEY_PROGRESS_TOTAL, result.progress.total)
+                        .build()
+                )
+            }
+            true
+        }
+
+        if (completed == null) {
+            return Result.retry()
         }
 
         return if (lastPhase == AnalysisPhase.COMPLETE) {

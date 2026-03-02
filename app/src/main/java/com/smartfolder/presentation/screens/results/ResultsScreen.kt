@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -33,6 +34,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -279,6 +283,31 @@ private fun ReviewSummary(
     onMoveAccepted: () -> Unit,
     onCancel: () -> Unit
 ) {
+    var showMoveConfirmation by remember { mutableStateOf(false) }
+
+    if (showMoveConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showMoveConfirmation = false },
+            title = { Text("Move Images") },
+            text = { Text("Move $acceptedCount image(s) to the reference folder? Files will be removed from the unsorted folder.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showMoveConfirmation = false
+                        onMoveAccepted()
+                    }
+                ) {
+                    Text("Move")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMoveConfirmation = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -308,7 +337,7 @@ private fun ReviewSummary(
 
         if (acceptedCount > 0) {
             Button(
-                onClick = onMoveAccepted,
+                onClick = { showMoveConfirmation = true },
                 enabled = !isMoving,
                 modifier = Modifier.fillMaxWidth()
             ) {

@@ -66,26 +66,63 @@ android {
 val downloadModels by tasks.registering {
     val modelsDir = file("src/main/assets/models")
     val models = mapOf(
-        "mobilenet_v3_small.tflite" to "https://storage.googleapis.com/mediapipe-models/image_embedder/mobilenet_v3_small/float32/latest/mobilenet_v3_small.tflite",
-        "mobilenet_v3_large.tflite" to "https://storage.googleapis.com/mediapipe-models/image_embedder/mobilenet_v3_large/float32/latest/mobilenet_v3_large.tflite"
+        "mobilenet_v3_small.tflite" to mapOf(
+            "url" to "https://storage.googleapis.com/mediapipe-models/image_embedder/mobilenet_v3_small/float32/latest/mobilenet_v3_small.tflite",
+            "minSize" to "10000"
+        ),
+        "mobilenet_v3_large.tflite" to mapOf(
+            "url" to "https://storage.googleapis.com/mediapipe-models/image_embedder/mobilenet_v3_large/float32/latest/mobilenet_v3_large.tflite",
+            "minSize" to "10000"
+        )
     )
 
     outputs.dir(modelsDir)
 
     doLast {
         modelsDir.mkdirs()
-        models.forEach { (name, url) ->
+        models.forEach { (name, config) ->
             val outputFile = File(modelsDir, name)
-            if (!outputFile.exists()) {
-                println("Downloading $name...")
-                URL(url).openStream().use { input ->
-                    outputFile.outputStream().use { output ->
-                        input.copyTo(output)
+            val urlStr = config["url"]!!
+            val minSize = config["minSize"]!!.toLong()
+
+            if (outputFile.exists() && outputFile.length() >= minSize) {
+                println("$name already exists (${outputFile.length()} bytes), skipping download")
+                return@forEach
+            }
+
+            val maxRetries = 3
+            for (attempt in 1..maxRetries) {
+                println("Downloading $name (attempt $attempt/$maxRetries)...")
+                val tempFile = File(modelsDir, "$name.tmp")
+                try {
+                    val connection = URL(urlStr).openConnection().apply {
+                        connectTimeout = 30_000
+                        readTimeout = 120_000
                     }
+                    connection.getInputStream().use { input ->
+                        tempFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+
+                    if (tempFile.length() < minSize) {
+                        tempFile.delete()
+                        throw RuntimeException(
+                            "$name download too small: ${tempFile.length()} bytes (expected >= $minSize)"
+                        )
+                    }
+
+                    tempFile.renameTo(outputFile)
+                    println("Downloaded $name (${outputFile.length()} bytes)")
+                    return@forEach
+                } catch (e: Exception) {
+                    tempFile.delete()
+                    if (attempt == maxRetries) {
+                        throw RuntimeException("Failed to download $name after $maxRetries attempts: ${e.message}", e)
+                    }
+                    println("Attempt $attempt failed: ${e.message}. Retrying...")
+                    Thread.sleep(2000L * attempt)
                 }
-                println("Downloaded $name (${outputFile.length()} bytes)")
-            } else {
-                println("$name already exists, skipping download")
             }
         }
     }

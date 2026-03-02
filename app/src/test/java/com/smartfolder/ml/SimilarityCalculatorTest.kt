@@ -6,39 +6,33 @@ import org.junit.Test
 
 class SimilarityCalculatorTest {
 
+    // -- cosineSimilarity (dot product for L2-normalized vectors) --
+
     @Test
-    fun `identical vectors have similarity 1`() {
+    fun `identical unit vectors have similarity 1`() {
         val a = floatArrayOf(1f, 0f, 0f)
         val b = floatArrayOf(1f, 0f, 0f)
         assertEquals(1f, SimilarityCalculator.cosineSimilarity(a, b), 0.0001f)
     }
 
     @Test
-    fun `orthogonal vectors have similarity 0`() {
+    fun `orthogonal unit vectors have similarity 0`() {
         val a = floatArrayOf(1f, 0f, 0f)
         val b = floatArrayOf(0f, 1f, 0f)
         assertEquals(0f, SimilarityCalculator.cosineSimilarity(a, b), 0.0001f)
     }
 
     @Test
-    fun `opposite vectors have similarity -1`() {
+    fun `opposite unit vectors have similarity -1`() {
         val a = floatArrayOf(1f, 0f, 0f)
         val b = floatArrayOf(-1f, 0f, 0f)
         assertEquals(-1f, SimilarityCalculator.cosineSimilarity(a, b), 0.0001f)
     }
 
     @Test
-    fun `similar vectors have high similarity`() {
-        val a = floatArrayOf(1f, 2f, 3f)
-        val b = floatArrayOf(1f, 2f, 3.1f)
-        val similarity = SimilarityCalculator.cosineSimilarity(a, b)
-        assert(similarity > 0.99f) { "Expected high similarity, got $similarity" }
-    }
-
-    @Test
-    fun `zero vector returns 0`() {
+    fun `zero vector dot product returns 0`() {
         val a = floatArrayOf(0f, 0f, 0f)
-        val b = floatArrayOf(1f, 2f, 3f)
+        val b = floatArrayOf(1f, 0f, 0f)
         assertEquals(0f, SimilarityCalculator.cosineSimilarity(a, b), 0.0001f)
     }
 
@@ -50,6 +44,25 @@ class SimilarityCalculatorTest {
             SimilarityCalculator.cosineSimilarity(a, b)
         }
     }
+
+    // -- cosineSimilarityFull (for non-normalized vectors) --
+
+    @Test
+    fun `full cosine similarity with non-unit vectors`() {
+        val a = floatArrayOf(1f, 2f, 3f)
+        val b = floatArrayOf(1f, 2f, 3.1f)
+        val similarity = SimilarityCalculator.cosineSimilarityFull(a, b)
+        assert(similarity > 0.99f) { "Expected high similarity, got $similarity" }
+    }
+
+    @Test
+    fun `full cosine similarity with zero vector returns 0`() {
+        val a = floatArrayOf(0f, 0f, 0f)
+        val b = floatArrayOf(1f, 2f, 3f)
+        assertEquals(0f, SimilarityCalculator.cosineSimilarityFull(a, b), 0.0001f)
+    }
+
+    // -- computeScore --
 
     @Test
     fun `computeScore uses correct weights`() {

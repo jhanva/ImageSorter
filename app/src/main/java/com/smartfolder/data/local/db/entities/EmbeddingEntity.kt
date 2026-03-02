@@ -15,7 +15,10 @@ import androidx.room.PrimaryKey
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index("imageId", unique = true)]
+    indices = [
+        Index("imageId", unique = true),
+        Index("modelName")
+    ]
 )
 data class EmbeddingEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
