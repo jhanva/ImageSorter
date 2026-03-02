@@ -5,6 +5,7 @@ import com.smartfolder.data.saf.MoveResult
 import com.smartfolder.data.saf.SafFileOps
 import com.smartfolder.domain.model.ImageInfo
 import com.smartfolder.domain.repository.ImageRepository
+import com.smartfolder.domain.repository.TransactionRunner
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -17,6 +18,7 @@ class MoveImagesUseCaseTest {
 
     private lateinit var safFileOps: SafFileOps
     private lateinit var imageRepository: ImageRepository
+    private lateinit var transactionRunner: TransactionRunner
     private lateinit var useCase: MoveImagesUseCase
 
     private val destUri = mock(Uri::class.java)
@@ -25,7 +27,10 @@ class MoveImagesUseCaseTest {
     fun setup() {
         safFileOps = mock(SafFileOps::class.java)
         imageRepository = mock(ImageRepository::class.java)
-        useCase = MoveImagesUseCase(safFileOps, imageRepository)
+        transactionRunner = object : TransactionRunner {
+            override suspend fun <T> runInTransaction(block: suspend () -> T): T = block()
+        }
+        useCase = MoveImagesUseCase(safFileOps, imageRepository, transactionRunner)
     }
 
     @Test

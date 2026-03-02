@@ -1,7 +1,7 @@
 package com.smartfolder.presentation.navigation
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -21,11 +21,6 @@ fun NavGraph(
     onSelectReferenceFolder: () -> Unit,
     onSelectUnsortedFolder: () -> Unit
 ) {
-    // Share AnalysisViewModel between Analysis and Results screens
-    val analysisEntry = remember(navController) {
-        navController.getBackStackEntry(Screen.Home.route)
-    }
-
     NavHost(
         navController = navController,
         startDestination = Screen.Home.route
@@ -52,7 +47,6 @@ fun NavGraph(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToResults = {
                     navController.navigate(Screen.Results.route) {
-                        // Pass suggestions via the saved state handle
                         launchSingleTop = true
                     }
                 }
@@ -61,12 +55,18 @@ fun NavGraph(
 
         composable(Screen.Results.route) {
             val viewModel: ResultsViewModel = hiltViewModel()
-            // Get suggestions from the analysis back stack entry
-            val analysisViewModel: AnalysisViewModel = hiltViewModel(
-                navController.previousBackStackEntry ?: it
-            )
-            val suggestions = analysisViewModel.uiState.value.suggestions
-            viewModel.setSuggestions(suggestions)
+
+            // Safely get AnalysisViewModel from previous back stack entry
+            val previousEntry = navController.previousBackStackEntry
+            val analysisViewModel: AnalysisViewModel? = previousEntry?.let { entry ->
+                hiltViewModel(entry)
+            }
+            val suggestions = analysisViewModel?.uiState?.value?.suggestions ?: emptyList()
+
+            // Set suggestions only once to avoid resetting on recomposition
+            LaunchedEffect(Unit) {
+                viewModel.setSuggestions(suggestions)
+            }
 
             ResultsScreen(
                 viewModel = viewModel,

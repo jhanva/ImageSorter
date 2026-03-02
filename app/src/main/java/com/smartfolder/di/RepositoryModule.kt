@@ -4,12 +4,14 @@ import com.smartfolder.data.repository.DecisionRepositoryImpl
 import com.smartfolder.data.repository.EmbeddingRepositoryImpl
 import com.smartfolder.data.repository.FolderRepositoryImpl
 import com.smartfolder.data.repository.ImageRepositoryImpl
+import com.smartfolder.data.repository.RoomTransactionRunner
 import com.smartfolder.data.repository.SettingsRepositoryImpl
 import com.smartfolder.domain.repository.DecisionRepository
 import com.smartfolder.domain.repository.EmbeddingRepository
 import com.smartfolder.domain.repository.FolderRepository
 import com.smartfolder.domain.repository.ImageRepository
 import com.smartfolder.domain.repository.SettingsRepository
+import com.smartfolder.domain.repository.TransactionRunner
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -39,4 +41,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindSettingsRepository(impl: SettingsRepositoryImpl): SettingsRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindTransactionRunner(impl: RoomTransactionRunner): TransactionRunner
 }

@@ -10,6 +10,7 @@ import com.smartfolder.domain.model.ModelChoice
 import com.smartfolder.domain.repository.EmbeddingRepository
 import com.smartfolder.domain.repository.FolderRepository
 import com.smartfolder.domain.repository.ImageRepository
+import com.smartfolder.domain.repository.TransactionRunner
 import com.smartfolder.ml.BitmapLoader
 import com.smartfolder.ml.ImageEmbedderWrapper
 import kotlinx.coroutines.flow.toList
@@ -28,6 +29,7 @@ class IndexFolderUseCaseTest {
     private lateinit var safManager: SafManager
     private lateinit var bitmapLoader: BitmapLoader
     private lateinit var imageEmbedder: ImageEmbedderWrapper
+    private lateinit var transactionRunner: TransactionRunner
     private lateinit var useCase: IndexFolderUseCase
 
     private val mockUri = mock(Uri::class.java)
@@ -40,9 +42,12 @@ class IndexFolderUseCaseTest {
         safManager = mock(SafManager::class.java)
         bitmapLoader = mock(BitmapLoader::class.java)
         imageEmbedder = mock(ImageEmbedderWrapper::class.java)
+        transactionRunner = object : TransactionRunner {
+            override suspend fun <T> runInTransaction(block: suspend () -> T): T = block()
+        }
         useCase = IndexFolderUseCase(
             folderRepository, imageRepository, embeddingRepository,
-            safManager, bitmapLoader, imageEmbedder
+            safManager, bitmapLoader, imageEmbedder, transactionRunner
         )
     }
 

@@ -10,6 +10,7 @@ import com.smartfolder.domain.model.ModelChoice
 import com.smartfolder.domain.repository.EmbeddingRepository
 import com.smartfolder.domain.repository.FolderRepository
 import com.smartfolder.domain.repository.ImageRepository
+import com.smartfolder.domain.repository.TransactionRunner
 import com.smartfolder.ml.BitmapLoader
 import com.smartfolder.ml.ImageEmbedderWrapper
 import kotlinx.coroutines.flow.Flow
@@ -23,7 +24,8 @@ class IndexFolderUseCase @Inject constructor(
     private val embeddingRepository: EmbeddingRepository,
     private val safManager: SafManager,
     private val bitmapLoader: BitmapLoader,
-    private val imageEmbedder: ImageEmbedderWrapper
+    private val imageEmbedder: ImageEmbedderWrapper,
+    private val transactionRunner: TransactionRunner
 ) {
     companion object {
         private const val REGISTRATION_BATCH_SIZE = 500
@@ -167,31 +169,33 @@ class IndexFolderUseCase @Inject constructor(
         for (batch in allImages.chunked(REGISTRATION_BATCH_SIZE)) {
             yield()
 
-            // Bulk fetch existing images by URI
-            val uris = batch.map { it.uri.toString() }
-            val existing = imageRepository.getByUris(uris)
-            val existingByUri = existing.associateBy { it.uri.toString() }
+            transactionRunner.runInTransaction {
+                // Bulk fetch existing images by URI
+                val uris = batch.map { it.uri.toString() }
+                val existing = imageRepository.getByUris(uris)
+                val existingByUri = existing.associateBy { it.uri.toString() }
 
-            // Separate new images from existing
-            val toInsert = mutableListOf<ImageInfo>()
-            for (image in batch) {
-                val uriStr = image.uri.toString()
-                val existingImage = existingByUri[uriStr]
-                if (existingImage == null) {
-                    toInsert.add(image)
-                } else if (existingImage.contentHash != image.contentHash) {
-                    // Content changed: update image and invalidate embedding
-                    imageRepository.update(image.copy(id = existingImage.id))
-                    embeddingRepository.getByImageId(existingImage.id)?.let {
-                        embeddingRepository.delete(it)
+                // Separate new images from existing
+                val toInsert = mutableListOf<ImageInfo>()
+                for (image in batch) {
+                    val uriStr = image.uri.toString()
+                    val existingImage = existingByUri[uriStr]
+                    if (existingImage == null) {
+                        toInsert.add(image)
+                    } else if (existingImage.contentHash != image.contentHash) {
+                        // Content changed: update image and invalidate embedding
+                        imageRepository.update(image.copy(id = existingImage.id))
+                        embeddingRepository.getByImageId(existingImage.id)?.let {
+                            embeddingRepository.delete(it)
+                        }
                     }
+                    // If existing and hash matches, skip (already registered)
                 }
-                // If existing and hash matches, skip (already registered)
-            }
 
-            // Batch insert new images
-            if (toInsert.isNotEmpty()) {
-                imageRepository.insertAll(toInsert)
+                // Batch insert new images
+                if (toInsert.isNotEmpty()) {
+                    imageRepository.insertAll(toInsert)
+                }
             }
         }
     }

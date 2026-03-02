@@ -5,6 +5,8 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -16,7 +18,7 @@ class BitmapLoader @Inject constructor(
         private const val TARGET_SIZE = 384
     }
 
-    fun loadForEmbedding(uri: Uri): Bitmap? {
+    suspend fun loadForEmbedding(uri: Uri): Bitmap? = withContext(Dispatchers.IO) {
         return try {
             // Pass 1: decode bounds only
             val boundsOptions = BitmapFactory.Options().apply {
