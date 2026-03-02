@@ -8,16 +8,23 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Text
@@ -28,10 +35,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.smartfolder.presentation.components.EmptyState
 import com.smartfolder.presentation.components.ErrorBanner
-import com.smartfolder.presentation.components.SuggestionCard
+import com.smartfolder.presentation.components.SimilarImageRow
 import com.smartfolder.presentation.components.ThresholdSlider
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,9 +56,21 @@ fun ResultsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Results (${uiState.filteredSuggestions.size})") },
+                title = {
+                    if (uiState.isReviewing) {
+                        Text("Review ${uiState.reviewProgress}")
+                    } else {
+                        Text("Results (${uiState.filteredSuggestions.size})")
+                    }
+                },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(onClick = {
+                        if (uiState.isReviewing) {
+                            viewModel.cancelReview()
+                        } else {
+                            onNavigateBack()
+                        }
+                    }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
@@ -79,78 +102,237 @@ fun ResultsScreen(
                 )
             }
 
-            // Threshold slider
-            ThresholdSlider(
-                value = uiState.threshold,
-                onValueChange = { viewModel.setThreshold(it) },
+            when {
+                uiState.reviewComplete -> ReviewSummary(
+                    acceptedCount = uiState.acceptedCount,
+                    skippedCount = uiState.skippedCount,
+                    isMoving = uiState.isMoving,
+                    onMoveAccepted = { viewModel.moveAccepted() },
+                    onCancel = { viewModel.cancelReview() }
+                )
+                uiState.isReviewing -> ReviewCard(
+                    uiState = uiState,
+                    onAccept = { viewModel.acceptCurrent() },
+                    onSkip = { viewModel.skipCurrent() }
+                )
+                else -> SuggestionsList(
+                    uiState = uiState,
+                    onThresholdChange = { viewModel.setThreshold(it) },
+                    onStartReview = { viewModel.startReview() }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SuggestionsList(
+    uiState: ResultsUiState,
+    onThresholdChange: (Float) -> Unit,
+    onStartReview: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        ThresholdSlider(
+            value = uiState.threshold,
+            onValueChange = onThresholdChange,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+
+        if (uiState.filteredSuggestions.isEmpty()) {
+            EmptyState(
+                title = "No Matches",
+                message = "No images match the current threshold. Try lowering it."
+            )
+        } else {
+            Text(
+                text = "${uiState.filteredSuggestions.size} images found above threshold",
+                style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
 
-            // Selection controls
-            Row(
+            Spacer(modifier = Modifier.weight(1f))
+
+            Button(
+                onClick = onStartReview,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(16.dp)
             ) {
-                Text(
-                    text = "${uiState.selectedIds.size} selected",
-                    style = MaterialTheme.typography.bodyMedium
+                Text("Start Review (one by one)")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReviewCard(
+    uiState: ResultsUiState,
+    onAccept: () -> Unit,
+    onSkip: () -> Unit
+) {
+    val suggestion = uiState.currentSuggestion ?: return
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Progress counters
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            Text(
+                text = "Accepted: ${uiState.acceptedCount}",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = "Skipped: ${uiState.skippedCount}",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Image preview
+        AsyncImage(
+            model = suggestion.image.uri,
+            contentDescription = suggestion.image.displayName,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(300.dp)
+                .clip(RoundedCornerShape(12.dp))
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Image name
+        Text(
+            text = suggestion.image.displayName,
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center
+        )
+
+        // Score
+        Text(
+            text = "Score: %.1f%%".format(suggestion.score * 100),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.primary
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Similar images from reference folder
+        if (suggestion.topSimilarFromA.isNotEmpty()) {
+            Text(
+                text = "Similar in reference folder:",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            SimilarImageRow(matches = suggestion.topSimilarFromA)
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Accept / Skip buttons
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            OutlinedButton(
+                onClick = onSkip,
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { viewModel.selectAll() }) {
-                        Text("Select All")
-                    }
-                    TextButton(onClick = { viewModel.deselectAll() }) {
-                        Text("Deselect")
-                    }
-                }
+            ) {
+                Icon(Icons.Default.Close, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Skip")
             }
 
-            if (uiState.filteredSuggestions.isEmpty()) {
-                EmptyState(
-                    title = "No Matches",
-                    message = "No images match the current threshold. Try lowering it."
-                )
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(
-                        items = uiState.filteredSuggestions,
-                        key = { it.image.id }
-                    ) { suggestion ->
-                        SuggestionCard(
-                            suggestion = suggestion,
-                            isSelected = suggestion.image.id in uiState.selectedIds,
-                            onSelectionChanged = { viewModel.toggleSelection(suggestion.image.id) }
-                        )
-                    }
+            Button(
+                onClick = onAccept,
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.Check, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Move")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReviewSummary(
+    acceptedCount: Int,
+    skippedCount: Int,
+    isMoving: Boolean,
+    onMoveAccepted: () -> Unit,
+    onCancel: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = "Review Complete",
+            style = MaterialTheme.typography.headlineSmall
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            text = "$acceptedCount accepted",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = "$skippedCount skipped",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        if (acceptedCount > 0) {
+            Button(
+                onClick = onMoveAccepted,
+                enabled = !isMoving,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (isMoving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .padding(end = 8.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                 }
+                Text("Move $acceptedCount image(s) to Reference Folder")
             }
 
-            // Move button
-            if (uiState.selectedIds.isNotEmpty()) {
-                Button(
-                    onClick = { viewModel.moveSelected() },
-                    enabled = !uiState.isMoving,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                ) {
-                    if (uiState.isMoving) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.padding(end = 8.dp),
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-                    }
-                    Text("Move ${uiState.selectedIds.size} Images to Reference Folder")
-                }
-            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        OutlinedButton(
+            onClick = onCancel,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(if (acceptedCount > 0) "Cancel" else "Go Back")
         }
     }
 }
