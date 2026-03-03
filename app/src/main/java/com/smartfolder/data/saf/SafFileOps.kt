@@ -1,9 +1,11 @@
 package com.smartfolder.data.saf
 
+import android.content.ContentValues
 import android.content.Context
-import android.os.Build
 import android.net.Uri
+import android.os.Build
 import android.provider.DocumentsContract
+import android.provider.MediaStore
 import androidx.documentfile.provider.DocumentFile
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -14,6 +16,9 @@ class SafFileOps @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     fun moveFile(sourceUri: Uri, destinationFolderUri: Uri, displayName: String): MoveResult {
+        // Primary path for modern Android/shared storage.
+        tryMoveWithMediaStore(sourceUri, destinationFolderUri)?.let { return it }
+
         // Fast-path: true SAF move within a provider when supported.
         tryMoveWithDocumentsContract(sourceUri, destinationFolderUri)?.let { return it }
 
@@ -47,6 +52,32 @@ class SafFileOps @Inject constructor(
                 // Best effort cleanup
             }
             MoveResult.Failure(e.message ?: "Unknown error during file move")
+        }
+    }
+
+    private fun tryMoveWithMediaStore(
+        sourceUri: Uri,
+        destinationFolderUri: Uri
+    ): MoveResult? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+        if (sourceUri.scheme != "content") return null
+        if (!sourceUri.authority.orEmpty().contains("media")) return null
+
+        val destinationDocId = runCatching {
+            DocumentsContract.getTreeDocumentId(destinationFolderUri)
+        }.getOrNull() ?: return null
+
+        val relativePath = destinationDocId.substringAfter(':', "").trim('/')
+        val normalizedRelativePath = if (relativePath.isBlank()) "" else "$relativePath/"
+
+        return try {
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.RELATIVE_PATH, normalizedRelativePath)
+            }
+            val updated = context.contentResolver.update(sourceUri, values, null, null)
+            if (updated > 0) MoveResult.Moved(sourceUri) else null
+        } catch (_: Exception) {
+            null
         }
     }
 

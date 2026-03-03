@@ -1,7 +1,6 @@
 package com.smartfolder.presentation.screens.home
 
 import android.Manifest
-import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -56,21 +55,6 @@ fun HomeScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     var showFolderDialog by remember { mutableStateOf(false) }
     var pendingRole by remember { mutableStateOf<FolderSelectRole?>(null) }
-    var pendingInitialUri by remember { mutableStateOf<Uri?>(null) }
-
-    val pickFolderLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
-    ) { uri ->
-        val role = pendingRole
-        pendingRole = null
-        pendingInitialUri = null
-        uri ?: return@rememberLauncherForActivityResult
-        when (role) {
-            FolderSelectRole.REFERENCE -> viewModel.selectReferenceFolder(uri)
-            FolderSelectRole.UNSORTED -> viewModel.selectUnsortedFolder(uri)
-            null -> Unit
-        }
-    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -122,7 +106,6 @@ fun HomeScreen(
             onDismiss = {
                 showFolderDialog = false
                 pendingRole = null
-                pendingInitialUri = null
             },
             onSelect = { selected ->
                 showFolderDialog = false
@@ -136,11 +119,6 @@ fun HomeScreen(
                     null -> Unit
                 }
                 pendingRole = null
-                pendingInitialUri = null
-            },
-            onManualPick = {
-                showFolderDialog = false
-                pickFolderLauncher.launch(pendingInitialUri)
             }
         )
     }
@@ -284,8 +262,7 @@ private fun FolderSelectionDialog(
     folders: List<ImageFolderOption>,
     isLoading: Boolean,
     onDismiss: () -> Unit,
-    onSelect: (ImageFolderOption) -> Unit,
-    onManualPick: () -> Unit
+    onSelect: (ImageFolderOption) -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -300,7 +277,7 @@ private fun FolderSelectionDialog(
                     Text("Loading folders...")
                 }
             } else if (folders.isEmpty()) {
-                Text("No image folders found. You can still choose manually from storage.")
+                Text("No image folders found.")
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(folders) { folder ->
@@ -324,10 +301,6 @@ private fun FolderSelectionDialog(
             if (folders.isEmpty() && !isLoading) {
                 TextButton(onClick = onDismiss) {
                     Text("Close")
-                }
-            } else if (!isLoading) {
-                TextButton(onClick = onManualPick) {
-                    Text("Pick manually")
                 }
             }
         },

@@ -1,5 +1,11 @@
 package com.smartfolder.presentation.screens.results
 
+import android.app.Activity
+import android.os.Build
+import android.provider.MediaStore
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,6 +43,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,6 +63,16 @@ fun ResultsScreen(
     onNavigateBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    val writeRequestLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            viewModel.moveAccepted()
+        } else {
+            viewModel.setError("Write permission denied. Could not move selected images.")
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -111,7 +128,30 @@ fun ResultsScreen(
                     acceptedCount = uiState.acceptedCount,
                     skippedCount = uiState.skippedCount,
                     isMoving = uiState.isMoving,
-                    onMoveAccepted = { viewModel.moveAccepted() },
+                    onMoveAccepted = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            val uris = viewModel.getAcceptedImageUris()
+                            if (uris.isEmpty()) {
+                                viewModel.moveAccepted()
+                            } else {
+                                try {
+                                    val writeRequest = MediaStore.createWriteRequest(
+                                        context.contentResolver,
+                                        uris
+                                    )
+                                    writeRequestLauncher.launch(
+                                        IntentSenderRequest.Builder(writeRequest.intentSender).build()
+                                    )
+                                } catch (e: Exception) {
+                                    viewModel.setError(
+                                        e.message ?: "Could not request write permission for selected images."
+                                    )
+                                }
+                            }
+                        } else {
+                            viewModel.moveAccepted()
+                        }
+                    },
                     onCancel = { viewModel.cancelReview() }
                 )
                 uiState.isReviewing -> ReviewCard(

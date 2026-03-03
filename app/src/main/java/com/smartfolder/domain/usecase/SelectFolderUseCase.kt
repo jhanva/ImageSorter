@@ -16,23 +16,12 @@ class SelectFolderUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(uri: Uri, role: FolderRole): Folder {
         safManager.takePersistablePermission(uri)
-        val hasTreeAccess = safManager.hasPersistedPermission(uri)
-        if (!hasTreeAccess) {
-            throw IllegalStateException(
-                "Folder access is not fully granted yet. In Secure Folder, use manual folder grant from the system picker."
-            )
-        }
         val displayName = safManager.getFolderDisplayName(uri)
-        val imageCount = try {
-            safManager.listImageFiles(uri, recursive = true).size
-        } catch (_: Exception) {
-            // Fallback to MediaStore count when SAF listing is not available yet.
-            val documentId = runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull()
-            if (documentId != null) {
-                mediaStoreFolderProvider.getImageCountForDocumentId(documentId)
-            } else {
-                0
-            }
+        val documentId = runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull()
+        val imageCount = if (documentId != null) {
+            mediaStoreFolderProvider.getImageCountForDocumentId(documentId)
+        } else {
+            0
         }
 
         val existing = folderRepository.getByUri(uri.toString())

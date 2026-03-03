@@ -1,6 +1,9 @@
 package com.smartfolder.domain.usecase
 
+import android.provider.DocumentsContract
+import com.smartfolder.data.media.MediaStoreFolderProvider
 import com.smartfolder.data.saf.SafManager
+import com.smartfolder.data.saf.SafImageFile
 import com.smartfolder.domain.model.Embedding
 import com.smartfolder.domain.model.ExecutionProfile
 import com.smartfolder.domain.model.Folder
@@ -30,6 +33,7 @@ class IndexFolderUseCase @Inject constructor(
     private val folderRepository: FolderRepository,
     private val imageRepository: ImageRepository,
     private val embeddingRepository: EmbeddingRepository,
+    private val mediaStoreFolderProvider: MediaStoreFolderProvider,
     private val safManager: SafManager,
     private val bitmapLoader: BitmapLoader,
     private val imageEmbedder: ImageEmbedderWrapper,
@@ -50,14 +54,26 @@ class IndexFolderUseCase @Inject constructor(
         modelChoice: ModelChoice,
         executionProfile: ExecutionProfile = ExecutionProfile.BALANCED
     ): Flow<IndexingProgress> = flow {
-        emit(IndexingProgress(phase = IndexingPhase.LISTING_FILES))
+        emit(
+            IndexingProgress(
+                phase = IndexingPhase.LISTING_FILES,
+                currentFileName = "Loading model..."
+            )
+        )
 
         try {
             // Initialize embedder
             imageEmbedder.initialize(modelChoice.modelFileName)
 
+            emit(
+                IndexingProgress(
+                    phase = IndexingPhase.LISTING_FILES,
+                    currentFileName = "Scanning selected folder..."
+                )
+            )
+
             // List image files from folder (uses fast ContentResolver query)
-            val imageFiles = safManager.listImageFiles(folder.uri, recursive = true)
+            val imageFiles = listImageFiles(folder)
             if (imageFiles.isEmpty()) {
                 emit(IndexingProgress(phase = IndexingPhase.COMPLETE, total = 0))
                 return@flow
@@ -202,7 +218,7 @@ class IndexFolderUseCase @Inject constructor(
      */
     private suspend fun registerImagesBatch(
         folder: Folder,
-        imageFiles: List<com.smartfolder.data.saf.SafImageFile>
+        imageFiles: List<SafImageFile>
     ) {
         val allImages = imageFiles.map { file ->
             ImageInfo(
@@ -258,5 +274,13 @@ class IndexFolderUseCase @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun listImageFiles(folder: Folder): List<SafImageFile> {
+        val documentId = runCatching { DocumentsContract.getTreeDocumentId(folder.uri) }.getOrNull()
+        if (documentId != null) {
+            return mediaStoreFolderProvider.listImageFilesForDocumentId(documentId, recursive = true)
+        }
+        return safManager.listImageFiles(folder.uri, recursive = true)
     }
 }

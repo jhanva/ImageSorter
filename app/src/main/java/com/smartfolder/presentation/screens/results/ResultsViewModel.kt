@@ -1,5 +1,6 @@
 package com.smartfolder.presentation.screens.results
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartfolder.domain.model.FolderRole
@@ -138,6 +139,16 @@ class ResultsViewModel @Inject constructor(
             applyFilter()
             persistSuggestions(remaining)
         }
+    }
+
+    fun getAcceptedImageUris(): List<Uri> {
+        return _uiState.value.filteredSuggestions
+            .filter { it.image.id in _uiState.value.acceptedIds }
+            .map { it.image.uri }
+    }
+
+    fun setError(message: String) {
+        _uiState.value = _uiState.value.copy(error = message)
     }
 
     fun cancelReview() {
