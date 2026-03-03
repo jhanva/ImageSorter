@@ -190,11 +190,20 @@ private fun SuggestionsList(
                 message = "No images match the current threshold. Try lowering it."
             )
         } else {
-            Text(
-                text = "${uiState.filteredSuggestions.size} images found above threshold",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-            )
+            if (uiState.isDebugTopFallback) {
+                Text(
+                    text = "DEBUG: showing Top ${uiState.filteredSuggestions.size} matches below threshold",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            } else {
+                Text(
+                    text = "${uiState.filteredSuggestions.size} images found above threshold",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
 
             Spacer(modifier = Modifier.weight(1f))
 

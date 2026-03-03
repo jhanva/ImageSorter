@@ -5,6 +5,7 @@ import com.smartfolder.domain.model.SuggestionItem
 data class ResultsUiState(
     val allSuggestions: List<SuggestionItem> = emptyList(),
     val filteredSuggestions: List<SuggestionItem> = emptyList(),
+    val isDebugTopFallback: Boolean = false,
     val threshold: Float = 0.80f,
     // Review mode: one-by-one image review
     val isReviewing: Boolean = false,

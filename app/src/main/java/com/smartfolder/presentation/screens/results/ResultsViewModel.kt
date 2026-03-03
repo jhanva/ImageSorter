@@ -3,6 +3,7 @@ package com.smartfolder.presentation.screens.results
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.smartfolder.BuildConfig
 import com.smartfolder.domain.model.FolderRole
 import com.smartfolder.domain.model.SuggestionItem
 import com.smartfolder.domain.model.StoredSuggestion
@@ -170,7 +171,20 @@ class ResultsViewModel @Inject constructor(
             _uiState.value.allSuggestions,
             _uiState.value.threshold
         )
-        _uiState.value = _uiState.value.copy(filteredSuggestions = filtered)
+        if (BuildConfig.DEBUG && filtered.isEmpty() && _uiState.value.allSuggestions.isNotEmpty()) {
+            val top = _uiState.value.allSuggestions
+                .sortedByDescending { it.score }
+                .take(10)
+            _uiState.value = _uiState.value.copy(
+                filteredSuggestions = top,
+                isDebugTopFallback = true
+            )
+        } else {
+            _uiState.value = _uiState.value.copy(
+                filteredSuggestions = filtered,
+                isDebugTopFallback = false
+            )
+        }
     }
 
     private suspend fun persistSuggestions(suggestions: List<SuggestionItem>) {
