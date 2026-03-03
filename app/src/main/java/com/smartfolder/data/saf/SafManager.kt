@@ -57,8 +57,21 @@ class SafManager @Inject constructor(
             if (!perm.isReadPermission) return@any false
             if (perm.uri.authority != targetAuthority) return@any false
             val permTreeId = runCatching { DocumentsContract.getTreeDocumentId(perm.uri) }.getOrNull()
-            permTreeId == targetTreeId
+            treeIdCoversTarget(permTreeId, targetTreeId)
         }
+    }
+
+    private fun treeIdCoversTarget(permissionTreeId: String?, targetTreeId: String): Boolean {
+        if (permissionTreeId == null) return false
+        if (permissionTreeId == targetTreeId) return true
+
+        val normalizedPermission = permissionTreeId.trimEnd('/')
+        val normalizedTarget = targetTreeId.trimEnd('/')
+        if (normalizedPermission.isEmpty() || normalizedTarget.isEmpty()) return false
+
+        // A persisted permission on a parent tree (e.g. "primary:DCIM")
+        // should grant access to child trees (e.g. "primary:DCIM/Camera").
+        return normalizedTarget.startsWith("$normalizedPermission/")
     }
 
     /**
@@ -135,7 +148,7 @@ class SafManager @Inject constructor(
             }
         } catch (e: Exception) {
             throw IllegalStateException(
-                "Failed to list images from selected folder. Please verify folder access and try again.",
+                "Failed to list images from selected folder. In Secure Folder you may need to grant folder access via system picker.",
                 e
             )
         }

@@ -1,10 +1,8 @@
 package com.smartfolder.presentation
 
-import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -25,36 +23,6 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var settingsRepository: SettingsRepository
 
-    private var pendingFolderRole: String? = null
-
-    private val folderPickerLauncher = registerForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
-    ) { uri ->
-        uri ?: return@registerForActivityResult
-        // Take persistable permission
-        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-        try {
-            contentResolver.takePersistableUriPermission(uri, flags)
-        } catch (e: SecurityException) {
-            try {
-                contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            } catch (ignored: SecurityException) {
-                // Could not persist permission
-            }
-        }
-
-        when (pendingFolderRole) {
-            "REFERENCE" -> homeViewModel?.selectReferenceFolder(uri)
-            "UNSORTED" -> homeViewModel?.selectUnsortedFolder(uri)
-        }
-        pendingFolderRole = null
-    }
-
-    private var homeViewModel: HomeViewModel? = null
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -66,18 +34,10 @@ class MainActivity : ComponentActivity() {
                 ) {
                     val navController = rememberNavController()
                     val viewModel: HomeViewModel = hiltViewModel()
-                    homeViewModel = viewModel
 
                     NavGraph(
                         navController = navController,
-                        onSelectReferenceFolder = {
-                            pendingFolderRole = "REFERENCE"
-                            folderPickerLauncher.launch(null)
-                        },
-                        onSelectUnsortedFolder = {
-                            pendingFolderRole = "UNSORTED"
-                            folderPickerLauncher.launch(null)
-                        }
+                        homeViewModel = viewModel
                     )
                 }
             }

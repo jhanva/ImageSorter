@@ -17,19 +17,15 @@ import com.smartfolder.presentation.screens.settings.SettingsViewModel
 @Composable
 fun NavGraph(
     navController: NavHostController,
-    onSelectReferenceFolder: () -> Unit,
-    onSelectUnsortedFolder: () -> Unit
+    homeViewModel: HomeViewModel
 ) {
     NavHost(
         navController = navController,
         startDestination = Screen.Home.route
     ) {
         composable(Screen.Home.route) {
-            val viewModel: HomeViewModel = hiltViewModel()
             HomeScreen(
-                viewModel = viewModel,
-                onSelectReferenceFolder = onSelectReferenceFolder,
-                onSelectUnsortedFolder = onSelectUnsortedFolder,
+                viewModel = homeViewModel,
                 onNavigateToAnalysis = {
                     navController.navigate(Screen.Analysis.route)
                 },

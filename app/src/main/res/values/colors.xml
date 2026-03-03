@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="launcher_bg">#0E3A5F</color>
-    <color name="launcher_fg">#F9B84B</color>
-    <color name="launcher_fg_dark">#D9962A</color>
+    <color name="launcher_bg">#F3F4F6</color>
+    <color name="launcher_fg">#1F2937</color>
+    <color name="launcher_fg_secondary">#9CA3AF</color>
 </resources>

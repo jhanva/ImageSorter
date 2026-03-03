@@ -53,17 +53,6 @@ class IndexFolderUseCase @Inject constructor(
         emit(IndexingProgress(phase = IndexingPhase.LISTING_FILES))
 
         try {
-            // Verify SAF permission is still valid
-            if (!safManager.hasPersistedPermission(folder.uri)) {
-                emit(
-                    IndexingProgress(
-                        phase = IndexingPhase.ERROR,
-                        errorMessage = "Folder access was revoked. Please re-select the folder."
-                    )
-                )
-                return@flow
-            }
-
             // Initialize embedder
             imageEmbedder.initialize(modelChoice.modelFileName)
 

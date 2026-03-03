@@ -2,6 +2,7 @@ package com.smartfolder.presentation.screens.home
 
 import com.smartfolder.domain.model.ExecutionProfile
 import com.smartfolder.domain.model.Folder
+import com.smartfolder.domain.model.ImageFolderOption
 import com.smartfolder.domain.model.IndexingProgress
 import com.smartfolder.domain.model.ModelChoice
 
@@ -14,6 +15,8 @@ data class HomeUiState(
     val unsortedIndexingProgress: IndexingProgress = IndexingProgress(),
     val isIndexingRef: Boolean = false,
     val isIndexingUnsorted: Boolean = false,
+    val availableImageFolders: List<ImageFolderOption> = emptyList(),
+    val isLoadingImageFolders: Boolean = false,
     val canAnalyze: Boolean = false,
     val error: String? = null
 )

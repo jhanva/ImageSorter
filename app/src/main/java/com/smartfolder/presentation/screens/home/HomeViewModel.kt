@@ -3,6 +3,7 @@ package com.smartfolder.presentation.screens.home
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.smartfolder.data.media.MediaStoreFolderProvider
 import com.smartfolder.data.saf.SafManager
 import com.smartfolder.domain.model.FolderRole
 import com.smartfolder.domain.model.IndexingPhase
@@ -27,6 +28,7 @@ class HomeViewModel @Inject constructor(
     private val folderRepository: FolderRepository,
     private val settingsRepository: SettingsRepository,
     private val embeddingRepository: EmbeddingRepository,
+    private val mediaStoreFolderProvider: MediaStoreFolderProvider,
     private val safManager: SafManager
 ) : ViewModel() {
 
@@ -46,6 +48,7 @@ class HomeViewModel @Inject constructor(
             }
         }
         loadExistingFolders()
+        refreshAvailableImageFolders()
     }
 
     private fun loadExistingFolders() {
@@ -168,6 +171,23 @@ class HomeViewModel @Inject constructor(
 
     fun dismissError() {
         _uiState.value = _uiState.value.copy(error = null)
+    }
+
+    fun refreshAvailableImageFolders() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoadingImageFolders = true)
+            val folders = try {
+                mediaStoreFolderProvider.getImageFolders()
+            } catch (_: SecurityException) {
+                emptyList()
+            } catch (_: Exception) {
+                emptyList()
+            }
+            _uiState.value = _uiState.value.copy(
+                availableImageFolders = folders,
+                isLoadingImageFolders = false
+            )
+        }
     }
 
     private fun updateCanAnalyze() {

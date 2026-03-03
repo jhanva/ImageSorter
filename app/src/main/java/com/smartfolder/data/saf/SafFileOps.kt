@@ -1,7 +1,9 @@
 package com.smartfolder.data.saf
 
 import android.content.Context
+import android.os.Build
 import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.documentfile.provider.DocumentFile
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -12,6 +14,9 @@ class SafFileOps @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     fun moveFile(sourceUri: Uri, destinationFolderUri: Uri, displayName: String): MoveResult {
+        // Fast-path: true SAF move within a provider when supported.
+        tryMoveWithDocumentsContract(sourceUri, destinationFolderUri)?.let { return it }
+
         val destFolder = DocumentFile.fromTreeUri(context, destinationFolderUri)
             ?: return MoveResult.Failure("Cannot access destination folder")
 
@@ -42,6 +47,38 @@ class SafFileOps @Inject constructor(
                 // Best effort cleanup
             }
             MoveResult.Failure(e.message ?: "Unknown error during file move")
+        }
+    }
+
+    private fun tryMoveWithDocumentsContract(
+        sourceUri: Uri,
+        destinationFolderUri: Uri
+    ): MoveResult? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return null
+        if (sourceUri.authority != destinationFolderUri.authority) return null
+
+        return try {
+            val resolver = context.contentResolver
+            val sourceDocId = DocumentsContract.getDocumentId(sourceUri)
+            val sourceParentDocId = sourceDocId.substringBeforeLast('/', missingDelimiterValue = "")
+                .ifBlank { DocumentsContract.getTreeDocumentId(sourceUri) }
+            val sourceParentUri = DocumentsContract.buildDocumentUriUsingTree(sourceUri, sourceParentDocId)
+            val targetParentDocId = DocumentsContract.getTreeDocumentId(destinationFolderUri)
+            val targetParentUri = DocumentsContract.buildDocumentUriUsingTree(destinationFolderUri, targetParentDocId)
+
+            val movedUri = DocumentsContract.moveDocument(
+                resolver,
+                sourceUri,
+                sourceParentUri,
+                targetParentUri
+            )
+            if (movedUri != null) {
+                MoveResult.Moved(movedUri)
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
         }
     }
 

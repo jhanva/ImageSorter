@@ -1,4 +1,8 @@
 import java.net.URL
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import com.android.build.gradle.internal.api.BaseVariantOutputImpl
 
 plugins {
     id("com.android.application")
@@ -60,6 +64,14 @@ android {
 
     androidResources {
         noCompress += "tflite"
+    }
+}
+
+android.applicationVariants.all {
+    outputs.all {
+        val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+        val fileName = "ImageSorter-v${versionName}(${versionCode})-${buildType.name}-$timestamp.apk"
+        (this as BaseVariantOutputImpl).outputFileName = fileName
     }
 }
 
