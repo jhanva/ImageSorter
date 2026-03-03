@@ -14,7 +14,12 @@ class SelectFolderUseCase @Inject constructor(
     suspend operator fun invoke(uri: Uri, role: FolderRole): Folder {
         safManager.takePersistablePermission(uri)
         val displayName = safManager.getFolderDisplayName(uri)
-        val imageFiles = safManager.listImageFiles(uri, recursive = true)
+        val imageCount = try {
+            safManager.listImageFiles(uri, recursive = true).size
+        } catch (_: Exception) {
+            // Folder selection should still succeed even if initial listing fails.
+            0
+        }
 
         val existing = folderRepository.getByUri(uri.toString())
         val foldersWithSameRole = folderRepository.getByRole(role)
@@ -27,7 +32,7 @@ class SelectFolderUseCase @Inject constructor(
             val updated = existing.copy(
                 role = role,
                 displayName = displayName,
-                imageCount = imageFiles.size
+                imageCount = imageCount
             )
             folderRepository.update(updated)
             return updated
@@ -37,7 +42,7 @@ class SelectFolderUseCase @Inject constructor(
             uri = uri,
             displayName = displayName,
             role = role,
-            imageCount = imageFiles.size
+            imageCount = imageCount
         )
         val id = folderRepository.insert(folder)
         return folder.copy(id = id)

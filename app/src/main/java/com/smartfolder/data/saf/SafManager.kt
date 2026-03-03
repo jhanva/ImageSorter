@@ -38,8 +38,26 @@ class SafManager @Inject constructor(
     }
 
     fun hasPersistedPermission(uri: Uri): Boolean {
-        return context.contentResolver.persistedUriPermissions.any {
-            it.uri == uri && it.isReadPermission
+        val permissions = context.contentResolver.persistedUriPermissions
+
+        // Fast path: exact URI match.
+        if (permissions.any { it.uri == uri && it.isReadPermission }) {
+            return true
+        }
+
+        // Some providers can return equivalent tree URIs with different encoded paths.
+        // Treat them as valid if authority and treeDocumentId match.
+        val targetTreeId = runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull()
+        val targetAuthority = uri.authority
+        if (targetTreeId == null || targetAuthority == null) {
+            return false
+        }
+
+        return permissions.any { perm ->
+            if (!perm.isReadPermission) return@any false
+            if (perm.uri.authority != targetAuthority) return@any false
+            val permTreeId = runCatching { DocumentsContract.getTreeDocumentId(perm.uri) }.getOrNull()
+            permTreeId == targetTreeId
         }
     }
 
