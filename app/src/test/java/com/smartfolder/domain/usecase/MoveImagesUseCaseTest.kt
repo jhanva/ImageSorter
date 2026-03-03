@@ -48,7 +48,7 @@ class MoveImagesUseCaseTest {
         val newUri = mock(Uri::class.java)
         val image = ImageInfo(1L, 1L, imageUri, "test.jpg", "hash", 1000L, 100L)
 
-        `when`(safFileOps.moveFile(imageUri, destUri, "test.jpg", "image/*"))
+        `when`(safFileOps.moveFile(imageUri, destUri, "test.jpg"))
             .thenReturn(MoveResult.Moved(newUri))
 
         val report = useCase(listOf(image), destUri)
@@ -65,7 +65,7 @@ class MoveImagesUseCaseTest {
         val newUri = mock(Uri::class.java)
         val image = ImageInfo(1L, 1L, imageUri, "test.jpg", "hash", 1000L, 100L)
 
-        `when`(safFileOps.moveFile(imageUri, destUri, "test.jpg", "image/*"))
+        `when`(safFileOps.moveFile(imageUri, destUri, "test.jpg"))
             .thenReturn(MoveResult.CopiedOnly(newUri, "Could not delete"))
 
         val report = useCase(listOf(image), destUri)
@@ -80,7 +80,7 @@ class MoveImagesUseCaseTest {
         val imageUri = mock(Uri::class.java)
         val image = ImageInfo(1L, 1L, imageUri, "test.jpg", "hash", 1000L, 100L)
 
-        `when`(safFileOps.moveFile(imageUri, destUri, "test.jpg", "image/*"))
+        `when`(safFileOps.moveFile(imageUri, destUri, "test.jpg"))
             .thenReturn(MoveResult.Failure("Permission denied"))
 
         val report = useCase(listOf(image), destUri)
@@ -103,11 +103,11 @@ class MoveImagesUseCaseTest {
         val img2 = ImageInfo(2L, 1L, uri2, "b.jpg", "h2", 100L, 100L)
         val img3 = ImageInfo(3L, 1L, uri3, "c.jpg", "h3", 100L, 100L)
 
-        `when`(safFileOps.moveFile(uri1, destUri, "a.jpg", "image/*"))
+        `when`(safFileOps.moveFile(uri1, destUri, "a.jpg"))
             .thenReturn(MoveResult.Moved(newUri))
-        `when`(safFileOps.moveFile(uri2, destUri, "b.jpg", "image/*"))
+        `when`(safFileOps.moveFile(uri2, destUri, "b.jpg"))
             .thenReturn(MoveResult.CopiedOnly(newUri, "reason"))
-        `when`(safFileOps.moveFile(uri3, destUri, "c.jpg", "image/*"))
+        `when`(safFileOps.moveFile(uri3, destUri, "c.jpg"))
             .thenReturn(MoveResult.Failure("error"))
 
         val report = useCase(listOf(img1, img2, img3), destUri)

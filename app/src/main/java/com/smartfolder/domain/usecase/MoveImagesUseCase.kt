@@ -36,8 +36,7 @@ class MoveImagesUseCase @Inject constructor(
             val result = safFileOps.moveFile(
                 sourceUri = image.uri,
                 destinationFolderUri = destinationFolderUri,
-                displayName = image.displayName,
-                mimeType = "image/*"
+                displayName = image.displayName
             )
 
             when (result) {

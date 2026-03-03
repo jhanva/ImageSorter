@@ -14,7 +14,7 @@ class SelectFolderUseCase @Inject constructor(
     suspend operator fun invoke(uri: Uri, role: FolderRole): Folder {
         safManager.takePersistablePermission(uri)
         val displayName = safManager.getFolderDisplayName(uri)
-        val imageFiles = safManager.listImageFiles(uri)
+        val imageFiles = safManager.listImageFiles(uri, recursive = true)
 
         val existing = folderRepository.getByUri(uri.toString())
         if (existing != null) {

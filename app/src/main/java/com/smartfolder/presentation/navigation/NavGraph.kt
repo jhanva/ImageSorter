@@ -1,7 +1,6 @@
 package com.smartfolder.presentation.navigation
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -54,20 +53,10 @@ fun NavGraph(
         }
 
         composable(Screen.Results.route) {
+            // Suggestions are loaded from DB in ResultsViewModel.init via
+            // LoadSuggestionsUseCase. AnalyzeImagesUseCase persists them
+            // before navigating here, so no back-stack dependency is needed.
             val viewModel: ResultsViewModel = hiltViewModel()
-
-            // Safely get AnalysisViewModel from previous back stack entry
-            val previousEntry = navController.previousBackStackEntry
-            val analysisViewModel: AnalysisViewModel? = previousEntry?.let { entry ->
-                hiltViewModel(entry)
-            }
-            val suggestions = analysisViewModel?.uiState?.value?.suggestions ?: emptyList()
-
-            // Set suggestions only once to avoid resetting on recomposition
-            LaunchedEffect(Unit) {
-                viewModel.setSuggestions(suggestions)
-            }
-
             ResultsScreen(
                 viewModel = viewModel,
                 onNavigateBack = {

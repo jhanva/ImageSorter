@@ -7,8 +7,10 @@ import com.smartfolder.domain.model.ModelChoice
 import com.smartfolder.domain.model.SimilarMatch
 import com.smartfolder.domain.model.ImageInfo
 import com.smartfolder.domain.model.SuggestionItem
+import com.smartfolder.domain.model.StoredSuggestion
 import com.smartfolder.domain.repository.EmbeddingRepository
 import com.smartfolder.domain.repository.ImageRepository
+import com.smartfolder.domain.repository.SuggestionRepository
 import com.smartfolder.ml.CentroidCalculator
 import com.smartfolder.ml.SimilarityCalculator
 import kotlinx.coroutines.flow.Flow
@@ -18,7 +20,8 @@ import javax.inject.Inject
 
 class AnalyzeImagesUseCase @Inject constructor(
     private val imageRepository: ImageRepository,
-    private val embeddingRepository: EmbeddingRepository
+    private val embeddingRepository: EmbeddingRepository,
+    private val suggestionRepository: SuggestionRepository
 ) {
     companion object {
         // Throttle progress emissions: emit at most every N images
@@ -39,6 +42,7 @@ class AnalyzeImagesUseCase @Inject constructor(
     ): Flow<Result> = flow {
         try {
             emit(Result(emptyList(), AnalysisProgress(phase = AnalysisPhase.CENTROID)))
+            suggestionRepository.deleteAll()
 
             // Get reference embeddings
             val refEmbeddings = embeddingRepository.getByFolderAndModel(
@@ -164,6 +168,20 @@ class AnalyzeImagesUseCase @Inject constructor(
 
             // Sort by score descending
             val sortedSuggestions = suggestions.sortedByDescending { it.score }
+
+            val createdAt = System.currentTimeMillis()
+            val stored = sortedSuggestions.map { suggestion ->
+                StoredSuggestion(
+                    imageId = suggestion.image.id,
+                    score = suggestion.score,
+                    centroidScore = suggestion.centroidScore,
+                    topKScore = suggestion.topKScore,
+                    topSimilarIds = suggestion.topSimilarFromA.map { it.image.id },
+                    topSimilarScores = suggestion.topSimilarFromA.map { it.score },
+                    createdAt = createdAt
+                )
+            }
+            suggestionRepository.replaceAll(stored)
 
             emit(Result(sortedSuggestions, AnalysisProgress(
                 phase = AnalysisPhase.COMPLETE,

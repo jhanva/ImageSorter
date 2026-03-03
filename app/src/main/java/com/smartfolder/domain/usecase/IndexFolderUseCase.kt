@@ -50,7 +50,7 @@ class IndexFolderUseCase @Inject constructor(
             imageEmbedder.initialize(modelChoice.modelFileName)
 
             // List image files from folder (uses fast ContentResolver query)
-            val imageFiles = safManager.listImageFiles(folder.uri)
+            val imageFiles = safManager.listImageFiles(folder.uri, recursive = true)
             if (imageFiles.isEmpty()) {
                 emit(IndexingProgress(phase = IndexingPhase.COMPLETE, total = 0))
                 return@flow
@@ -169,6 +169,16 @@ class IndexFolderUseCase @Inject constructor(
                 sizeBytes = file.sizeBytes,
                 lastModified = file.lastModified
             )
+        }
+
+        // Remove DB entries for files that no longer exist in the folder
+        val currentUriSet = allImages.map { it.uri.toString() }.toSet()
+        val existingImages = imageRepository.getByFolder(folder.id)
+        val staleIds = existingImages
+            .filter { it.uri.toString() !in currentUriSet }
+            .map { it.id }
+        if (staleIds.isNotEmpty()) {
+            imageRepository.deleteByIds(staleIds)
         }
 
         // Process in batches to avoid memory pressure

@@ -5,6 +5,7 @@ import com.smartfolder.data.saf.SafImageFile
 import com.smartfolder.data.saf.SafManager
 import com.smartfolder.domain.model.Folder
 import com.smartfolder.domain.model.FolderRole
+import com.smartfolder.domain.model.ImageInfo
 import com.smartfolder.domain.model.IndexingPhase
 import com.smartfolder.domain.model.ModelChoice
 import com.smartfolder.domain.repository.EmbeddingRepository
@@ -18,8 +19,12 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
+import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.anyList
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
+import org.mockito.Mockito.verify
 
 class IndexFolderUseCaseTest {
 
@@ -55,13 +60,14 @@ class IndexFolderUseCaseTest {
     fun `empty folder completes immediately`() = runTest {
         val folder = Folder(1L, mockUri, "Empty", FolderRole.REFERENCE)
         `when`(safManager.hasPersistedPermission(mockUri)).thenReturn(true)
-        `when`(safManager.listImageFiles(mockUri)).thenReturn(emptyList())
+        `when`(safManager.listImageFiles(mockUri, true)).thenReturn(emptyList())
 
         val results = useCase(folder, ModelChoice.FAST).toList()
         val phases = results.map { it.phase }
 
         assertEquals(IndexingPhase.LISTING_FILES, phases.first())
         assertEquals(IndexingPhase.COMPLETE, phases.last())
+        verify(safManager).listImageFiles(mockUri, true)
     }
 
     @Test
@@ -74,7 +80,7 @@ class IndexFolderUseCaseTest {
         )
 
         `when`(safManager.hasPersistedPermission(mockUri)).thenReturn(true)
-        `when`(safManager.listImageFiles(mockUri)).thenReturn(imageFiles)
+        `when`(safManager.listImageFiles(mockUri, true)).thenReturn(imageFiles)
         `when`(imageRepository.getByUris(listOf("content://test/image.jpg")))
             .thenReturn(emptyList())
         `when`(imageRepository.insertAll(org.mockito.ArgumentMatchers.anyList()))
@@ -86,6 +92,54 @@ class IndexFolderUseCaseTest {
 
         assertTrue(phases.contains(IndexingPhase.LISTING_FILES))
         assertTrue(phases.contains(IndexingPhase.EMBEDDING))
+        verify(safManager).listImageFiles(mockUri, true)
+    }
+
+    @Test
+    fun `stale images are removed from db during indexing`() = runTest {
+        val folder = Folder(1L, mockUri, "Test", FolderRole.REFERENCE)
+
+        val currentUri = mock(Uri::class.java)
+        `when`(currentUri.toString()).thenReturn("content://test/image.jpg")
+        val staleUri = mock(Uri::class.java)
+        `when`(staleUri.toString()).thenReturn("content://test/old.jpg")
+
+        val imageFiles = listOf(
+            SafImageFile(currentUri, "image.jpg", 100L, 100L, "image/jpeg")
+        )
+
+        `when`(safManager.hasPersistedPermission(mockUri)).thenReturn(true)
+        `when`(safManager.listImageFiles(mockUri, true)).thenReturn(imageFiles)
+
+        val existingCurrent = ImageInfo(
+            id = 11L,
+            folderId = 1L,
+            uri = currentUri,
+            displayName = "image.jpg",
+            contentHash = "100_100",
+            sizeBytes = 100L,
+            lastModified = 100L
+        )
+        val existingStale = ImageInfo(
+            id = 10L,
+            folderId = 1L,
+            uri = staleUri,
+            displayName = "old.jpg",
+            contentHash = "100_100",
+            sizeBytes = 100L,
+            lastModified = 100L
+        )
+
+        `when`(imageRepository.getByFolder(1L)).thenReturn(listOf(existingCurrent, existingStale))
+        `when`(imageRepository.getByUris(listOf("content://test/image.jpg")))
+            .thenReturn(listOf(existingCurrent))
+        `when`(embeddingRepository.getByImageIds(anyList())).thenReturn(emptyList())
+        `when`(bitmapLoader.loadForEmbedding(any())).thenReturn(null)
+
+        useCase(folder, ModelChoice.FAST).toList()
+
+        verify(imageRepository).deleteByIds(listOf(10L))
+        verify(safManager).listImageFiles(mockUri, true)
     }
 
     private fun assertTrue(condition: Boolean) {

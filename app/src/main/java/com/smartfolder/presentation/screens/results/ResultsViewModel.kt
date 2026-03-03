@@ -4,10 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartfolder.domain.model.FolderRole
 import com.smartfolder.domain.model.SuggestionItem
+import com.smartfolder.domain.model.StoredSuggestion
 import com.smartfolder.domain.repository.FolderRepository
 import com.smartfolder.domain.repository.SettingsRepository
+import com.smartfolder.domain.repository.SuggestionRepository
 import com.smartfolder.domain.usecase.AcceptSuggestionUseCase
 import com.smartfolder.domain.usecase.GetSuggestionsUseCase
+import com.smartfolder.domain.usecase.LoadSuggestionsUseCase
 import com.smartfolder.domain.usecase.MoveImagesUseCase
 import com.smartfolder.domain.usecase.RejectSuggestionUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -25,7 +28,9 @@ class ResultsViewModel @Inject constructor(
     private val acceptSuggestionUseCase: AcceptSuggestionUseCase,
     private val rejectSuggestionUseCase: RejectSuggestionUseCase,
     private val folderRepository: FolderRepository,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val loadSuggestionsUseCase: LoadSuggestionsUseCase,
+    private val suggestionRepository: SuggestionRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ResultsUiState())
@@ -35,12 +40,15 @@ class ResultsViewModel @Inject constructor(
         viewModelScope.launch {
             val threshold = settingsRepository.threshold.first()
             _uiState.value = _uiState.value.copy(threshold = threshold)
+            applyFilter()
         }
-    }
-
-    fun setSuggestions(suggestions: List<SuggestionItem>) {
-        _uiState.value = _uiState.value.copy(allSuggestions = suggestions)
-        applyFilter()
+        viewModelScope.launch {
+            val stored = loadSuggestionsUseCase()
+            if (stored.isNotEmpty()) {
+                _uiState.value = _uiState.value.copy(allSuggestions = stored)
+                applyFilter()
+            }
+        }
     }
 
     fun setThreshold(threshold: Float) {
@@ -128,6 +136,7 @@ class ResultsViewModel @Inject constructor(
                 moveResultMessage = message
             )
             applyFilter()
+            persistSuggestions(remaining)
         }
     }
 
@@ -151,5 +160,21 @@ class ResultsViewModel @Inject constructor(
             _uiState.value.threshold
         )
         _uiState.value = _uiState.value.copy(filteredSuggestions = filtered)
+    }
+
+    private suspend fun persistSuggestions(suggestions: List<SuggestionItem>) {
+        val createdAt = System.currentTimeMillis()
+        val stored = suggestions.map { suggestion ->
+            StoredSuggestion(
+                imageId = suggestion.image.id,
+                score = suggestion.score,
+                centroidScore = suggestion.centroidScore,
+                topKScore = suggestion.topKScore,
+                topSimilarIds = suggestion.topSimilarFromA.map { it.image.id },
+                topSimilarScores = suggestion.topSimilarFromA.map { it.score },
+                createdAt = createdAt
+            )
+        }
+        suggestionRepository.replaceAll(stored)
     }
 }

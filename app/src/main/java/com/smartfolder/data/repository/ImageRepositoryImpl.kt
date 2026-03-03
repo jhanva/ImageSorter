@@ -29,6 +29,13 @@ class ImageRepositoryImpl @Inject constructor(
         return imageDao.getById(id)?.toDomain()
     }
 
+    override suspend fun getByIds(ids: List<Long>): List<ImageInfo> {
+        if (ids.isEmpty()) return emptyList()
+        return ids.chunked(SQLITE_BIND_LIMIT).flatMap { chunk ->
+            imageDao.getByIds(chunk).map { it.toDomain() }
+        }
+    }
+
     override suspend fun getByUri(uri: String): ImageInfo? {
         return imageDao.getByUri(uri)?.toDomain()
     }
@@ -58,6 +65,13 @@ class ImageRepositoryImpl @Inject constructor(
 
     override suspend fun delete(image: ImageInfo) {
         imageDao.delete(image.toEntity())
+    }
+
+    override suspend fun deleteByIds(ids: List<Long>) {
+        if (ids.isEmpty()) return
+        ids.chunked(SQLITE_BIND_LIMIT).forEach { chunk ->
+            imageDao.deleteByIds(chunk)
+        }
     }
 
     override suspend fun deleteByFolder(folderId: Long) {

@@ -7,22 +7,29 @@ import com.smartfolder.domain.model.Folder
 import com.smartfolder.domain.model.FolderRole
 import com.smartfolder.domain.model.ImageInfo
 import com.smartfolder.domain.model.ModelChoice
+import com.smartfolder.domain.model.StoredSuggestion
 import com.smartfolder.domain.repository.EmbeddingRepository
 import com.smartfolder.domain.repository.ImageRepository
+import com.smartfolder.domain.repository.SuggestionRepository
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.mockito.ArgumentMatchers.anyList
+import org.mockito.Mockito.doAnswer
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 
 class AnalyzeImagesUseCaseTest {
 
     private lateinit var imageRepository: ImageRepository
     private lateinit var embeddingRepository: EmbeddingRepository
+    private lateinit var suggestionRepository: SuggestionRepository
     private lateinit var useCase: AnalyzeImagesUseCase
+    private var capturedSuggestions: List<StoredSuggestion>? = null
 
     private val refFolder = Folder(
         id = 1L,
@@ -42,7 +49,14 @@ class AnalyzeImagesUseCaseTest {
     fun setup() {
         imageRepository = mock(ImageRepository::class.java)
         embeddingRepository = mock(EmbeddingRepository::class.java)
-        useCase = AnalyzeImagesUseCase(imageRepository, embeddingRepository)
+        suggestionRepository = mock(SuggestionRepository::class.java)
+        doAnswer { Unit }.`when`(suggestionRepository).deleteAll()
+        doAnswer {
+            @Suppress("UNCHECKED_CAST")
+            capturedSuggestions = it.getArgument(0) as List<StoredSuggestion>
+            Unit
+        }.`when`(suggestionRepository).replaceAll(anyList())
+        useCase = AnalyzeImagesUseCase(imageRepository, embeddingRepository, suggestionRepository)
     }
 
     @Test
@@ -55,6 +69,7 @@ class AnalyzeImagesUseCaseTest {
 
         assertEquals(AnalysisPhase.ERROR, lastResult.progress.phase)
         assertTrue(lastResult.suggestions.isEmpty())
+        verify(suggestionRepository).deleteAll()
     }
 
     @Test
@@ -98,6 +113,7 @@ class AnalyzeImagesUseCaseTest {
         assertEquals(AnalysisPhase.COMPLETE, lastResult.progress.phase)
         assertEquals(1, lastResult.suggestions.size)
         assertEquals(1f, lastResult.suggestions[0].score, 0.01f)
+        assertEquals(1, capturedSuggestions?.size)
     }
 
     @Test

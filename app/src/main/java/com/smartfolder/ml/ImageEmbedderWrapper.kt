@@ -28,49 +28,44 @@ class ImageEmbedderWrapper @Inject constructor(
     private var embedder: ImageEmbedder? = null
     @Volatile
     private var currentModelName: String? = null
+    @Volatile
+    private var currentDelegate: Delegate = Delegate.CPU
     private val mutex = Mutex()
 
-    suspend fun initialize(modelFileName: String) = mutex.withLock {
-        if (currentModelName == modelFileName && embedder != null) return@withLock
-
-        embedder?.close()
-        embedder = null
-        currentModelName = null
-
-        withContext(Dispatchers.IO) {
-            val baseOptions = try {
-                BaseOptions.builder()
-                    .setModelAssetPath("models/$modelFileName")
-                    .setDelegate(Delegate.GPU)
-                    .build()
-                    .also { Log.i(TAG, "Initialized with GPU delegate") }
-            } catch (e: Exception) {
-                Log.w(TAG, "GPU delegate unavailable, falling back to CPU: ${e.message}")
-                BaseOptions.builder()
-                    .setModelAssetPath("models/$modelFileName")
-                    .setDelegate(Delegate.CPU)
-                    .build()
-            }
-
-            val options = ImageEmbedder.ImageEmbedderOptions.builder()
-                .setBaseOptions(baseOptions)
-                .setL2Normalize(true)
-                .setQuantize(false)
-                .build()
-
-            val instance = ImageEmbedder.createFromOptions(context, options)
-            embedder = instance
-            currentModelName = modelFileName
-        }
+    suspend fun initialize(modelFileName: String) {
+        initializeInternal(modelFileName, forceCpu = false)
     }
 
     suspend fun embed(bitmap: Bitmap): FloatArray? {
-        // Only hold mutex briefly to get embedder reference
-        val embedderInstance = mutex.withLock {
-            embedder
-        } ?: return null
+        val snapshot = mutex.withLock {
+            Triple(embedder, currentModelName, currentDelegate)
+        }
+        val embedderInstance = snapshot.first ?: return null
+        val modelName = snapshot.second
+        val delegate = snapshot.third
 
-        // Inference runs outside the lock on IO dispatcher
+        val initial = runEmbed(embedderInstance, bitmap)
+        if (initial != null) return initial
+
+        if (delegate == Delegate.GPU && !modelName.isNullOrBlank()) {
+            initializeInternal(modelName, forceCpu = true)
+            val retryEmbedder = mutex.withLock { embedder } ?: return null
+            return runEmbed(retryEmbedder, bitmap)
+        }
+
+        return null
+    }
+
+    suspend fun close() = mutex.withLock {
+        embedder?.close()
+        embedder = null
+        currentModelName = null
+        currentDelegate = Delegate.CPU
+    }
+
+    fun getCurrentModelName(): String? = currentModelName
+
+    private suspend fun runEmbed(embedderInstance: ImageEmbedder, bitmap: Bitmap): FloatArray? {
         return withTimeoutOrNull(EMBED_TIMEOUT_MS) {
             withContext(Dispatchers.IO) {
                 try {
@@ -91,11 +86,47 @@ class ImageEmbedderWrapper @Inject constructor(
         }
     }
 
-    suspend fun close() = mutex.withLock {
+    private suspend fun initializeInternal(modelFileName: String, forceCpu: Boolean) = mutex.withLock {
+        if (currentModelName == modelFileName && embedder != null && (!forceCpu || currentDelegate == Delegate.CPU)) {
+            return@withLock
+        }
+
         embedder?.close()
         embedder = null
         currentModelName = null
-    }
 
-    fun getCurrentModelName(): String? = currentModelName
+        withContext(Dispatchers.IO) {
+            val (baseOptions, delegate) = if (forceCpu) {
+                BaseOptions.builder()
+                    .setModelAssetPath("models/$modelFileName")
+                    .setDelegate(Delegate.CPU)
+                    .build() to Delegate.CPU
+            } else {
+                try {
+                    BaseOptions.builder()
+                        .setModelAssetPath("models/$modelFileName")
+                        .setDelegate(Delegate.GPU)
+                        .build()
+                        .also { Log.i(TAG, "Initialized with GPU delegate") } to Delegate.GPU
+                } catch (e: Exception) {
+                    Log.w(TAG, "GPU delegate unavailable, falling back to CPU: ${e.message}")
+                    BaseOptions.builder()
+                        .setModelAssetPath("models/$modelFileName")
+                        .setDelegate(Delegate.CPU)
+                        .build() to Delegate.CPU
+                }
+            }
+
+            val options = ImageEmbedder.ImageEmbedderOptions.builder()
+                .setBaseOptions(baseOptions)
+                .setL2Normalize(true)
+                .setQuantize(false)
+                .build()
+
+            val instance = ImageEmbedder.createFromOptions(context, options)
+            embedder = instance
+            currentModelName = modelFileName
+            currentDelegate = delegate
+        }
+    }
 }

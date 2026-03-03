@@ -15,6 +15,9 @@ interface ImageDao {
     @Query("SELECT * FROM images WHERE id = :id")
     suspend fun getById(id: Long): ImageEntity?
 
+    @Query("SELECT * FROM images WHERE id IN (:ids)")
+    suspend fun getByIds(ids: List<Long>): List<ImageEntity>
+
     @Query("SELECT * FROM images WHERE uri = :uri")
     suspend fun getByUri(uri: String): ImageEntity?
 
@@ -32,6 +35,9 @@ interface ImageDao {
 
     @Delete
     suspend fun delete(image: ImageEntity)
+
+    @Query("DELETE FROM images WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<Long>)
 
     @Query("DELETE FROM images WHERE folderId = :folderId")
     suspend fun deleteByFolder(folderId: Long)

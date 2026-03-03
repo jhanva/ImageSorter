@@ -7,6 +7,7 @@ import com.smartfolder.data.saf.SafManager
 import com.smartfolder.domain.model.FolderRole
 import com.smartfolder.domain.model.IndexingPhase
 import com.smartfolder.domain.model.ModelChoice
+import com.smartfolder.domain.repository.EmbeddingRepository
 import com.smartfolder.domain.repository.FolderRepository
 import com.smartfolder.domain.repository.SettingsRepository
 import com.smartfolder.domain.usecase.IndexFolderUseCase
@@ -25,6 +26,7 @@ class HomeViewModel @Inject constructor(
     private val indexFolderUseCase: IndexFolderUseCase,
     private val folderRepository: FolderRepository,
     private val settingsRepository: SettingsRepository,
+    private val embeddingRepository: EmbeddingRepository,
     private val safManager: SafManager
 ) : ViewModel() {
 
@@ -35,6 +37,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.modelChoice.collect { choice ->
                 _uiState.value = _uiState.value.copy(modelChoice = choice)
+                updateCanAnalyze()
             }
         }
         loadExistingFolders()
@@ -57,9 +60,7 @@ class HomeViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(
                 referenceFolder = if (refPermissionLost) null else refFolder,
                 unsortedFolder = if (unsortedPermissionLost) null else unsortedFolder,
-                canAnalyze = !refPermissionLost && !unsortedPermissionLost
-                        && refFolder?.indexedCount?.let { it > 0 } == true
-                        && unsortedFolder?.indexedCount?.let { it > 0 } == true,
+                canAnalyze = false,
                 error = when {
                     refPermissionLost && unsortedPermissionLost ->
                         "Access to both folders was revoked. Please re-select them."
@@ -75,6 +76,7 @@ class HomeViewModel @Inject constructor(
             if (refPermissionLost && refFolder != null) folderRepository.delete(refFolder)
             if (unsortedPermissionLost && unsortedFolder != null) folderRepository.delete(unsortedFolder)
         }
+        updateCanAnalyze()
     }
 
     fun selectReferenceFolder(uri: Uri) {
@@ -158,10 +160,17 @@ class HomeViewModel @Inject constructor(
     private fun updateCanAnalyze() {
         val ref = _uiState.value.referenceFolder
         val unsorted = _uiState.value.unsortedFolder
-        _uiState.value = _uiState.value.copy(
-            canAnalyze = ref != null && unsorted != null
-                    && (ref.indexedCount) > 0
-                    && (unsorted.indexedCount) > 0
-        )
+        if (ref == null || unsorted == null) {
+            _uiState.value = _uiState.value.copy(canAnalyze = false)
+            return
+        }
+        viewModelScope.launch {
+            val model = _uiState.value.modelChoice
+            val refCount = embeddingRepository.countByFolderAndModel(ref.id, model.modelFileName)
+            val unsortedCount = embeddingRepository.countByFolderAndModel(unsorted.id, model.modelFileName)
+            _uiState.value = _uiState.value.copy(
+                canAnalyze = refCount > 0 && unsortedCount > 0
+            )
+        }
     }
 }

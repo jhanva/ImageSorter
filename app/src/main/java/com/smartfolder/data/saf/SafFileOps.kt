@@ -11,11 +11,12 @@ import javax.inject.Singleton
 class SafFileOps @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    fun moveFile(sourceUri: Uri, destinationFolderUri: Uri, displayName: String, mimeType: String): MoveResult {
+    fun moveFile(sourceUri: Uri, destinationFolderUri: Uri, displayName: String): MoveResult {
         val destFolder = DocumentFile.fromTreeUri(context, destinationFolderUri)
             ?: return MoveResult.Failure("Cannot access destination folder")
 
-        val destFile = destFolder.createFile(mimeType, displayName)
+        val resolvedMimeType = resolveMimeType(sourceUri, displayName)
+        val destFile = destFolder.createFile(resolvedMimeType, displayName)
             ?: return MoveResult.Failure("Cannot create file in destination folder")
 
         return try {
@@ -41,6 +42,23 @@ class SafFileOps @Inject constructor(
                 // Best effort cleanup
             }
             MoveResult.Failure(e.message ?: "Unknown error during file move")
+        }
+    }
+
+    private fun resolveMimeType(sourceUri: Uri, displayName: String): String {
+        val fromResolver = context.contentResolver.getType(sourceUri)
+        if (!fromResolver.isNullOrBlank() && fromResolver.startsWith("image/")) {
+            return fromResolver
+        }
+        val ext = displayName.substringAfterLast('.', "").lowercase()
+        return when (ext) {
+            "jpg", "jpeg" -> "image/jpeg"
+            "png" -> "image/png"
+            "webp" -> "image/webp"
+            "gif" -> "image/gif"
+            "bmp" -> "image/bmp"
+            "heif", "heic" -> "image/heif"
+            else -> "image/*"
         }
     }
 }
