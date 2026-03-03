@@ -33,8 +33,8 @@ class AnalysisViewModel @Inject constructor(
         analysisJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isAnalyzing = true, error = null)
 
-            val refFolder = folderRepository.getByRole(FolderRole.REFERENCE).firstOrNull()
-            val unsortedFolder = folderRepository.getByRole(FolderRole.UNSORTED).firstOrNull()
+            val refFolder = folderRepository.getByRole(FolderRole.REFERENCE).maxByOrNull { it.id }
+            val unsortedFolder = folderRepository.getByRole(FolderRole.UNSORTED).maxByOrNull { it.id }
 
             if (refFolder == null || unsortedFolder == null) {
                 _uiState.value = _uiState.value.copy(
@@ -45,13 +45,15 @@ class AnalysisViewModel @Inject constructor(
             }
 
             val modelChoice = settingsRepository.modelChoice.first()
+            val executionProfile = settingsRepository.executionProfile.first()
             val threshold = settingsRepository.threshold.first()
 
             analyzeImagesUseCase(
                 referenceFolder = refFolder,
                 unsortedFolder = unsortedFolder,
                 modelChoice = modelChoice,
-                threshold = threshold
+                threshold = threshold,
+                executionProfile = executionProfile
             ).collect { result ->
                 _uiState.value = _uiState.value.copy(
                     progress = result.progress,

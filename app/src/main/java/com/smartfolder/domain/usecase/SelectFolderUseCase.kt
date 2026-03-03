@@ -17,6 +17,12 @@ class SelectFolderUseCase @Inject constructor(
         val imageFiles = safManager.listImageFiles(uri, recursive = true)
 
         val existing = folderRepository.getByUri(uri.toString())
+        val foldersWithSameRole = folderRepository.getByRole(role)
+
+        // Keep a single folder per role to avoid ambiguous selection downstream.
+        val staleSameRoleFolders = foldersWithSameRole.filter { it.id != existing?.id }
+        staleSameRoleFolders.forEach { folderRepository.delete(it) }
+
         if (existing != null) {
             val updated = existing.copy(
                 role = role,

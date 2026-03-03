@@ -11,6 +11,7 @@ import com.smartfolder.domain.model.StoredSuggestion
 import com.smartfolder.domain.repository.EmbeddingRepository
 import com.smartfolder.domain.repository.ImageRepository
 import com.smartfolder.domain.repository.SuggestionRepository
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -50,12 +51,15 @@ class AnalyzeImagesUseCaseTest {
         imageRepository = mock(ImageRepository::class.java)
         embeddingRepository = mock(EmbeddingRepository::class.java)
         suggestionRepository = mock(SuggestionRepository::class.java)
-        doAnswer { Unit }.`when`(suggestionRepository).deleteAll()
-        doAnswer {
-            @Suppress("UNCHECKED_CAST")
-            capturedSuggestions = it.getArgument(0) as List<StoredSuggestion>
-            Unit
-        }.`when`(suggestionRepository).replaceAll(anyList())
+        runBlocking {
+            doAnswer { Unit }.`when`(suggestionRepository).deleteAll()
+            doAnswer {
+                @Suppress("UNCHECKED_CAST")
+                capturedSuggestions = it.getArgument(0) as List<StoredSuggestion>
+                Unit
+            }.`when`(suggestionRepository).replaceAll(anyList())
+            `when`(imageRepository.getByIds(emptyList())).thenReturn(emptyList())
+        }
         useCase = AnalyzeImagesUseCase(imageRepository, embeddingRepository, suggestionRepository)
     }
 
@@ -104,8 +108,7 @@ class AnalyzeImagesUseCaseTest {
             .thenReturn(listOf(refEmbedding))
         `when`(embeddingRepository.getByFolderAndModel(2L, ModelChoice.FAST.modelFileName))
             .thenReturn(listOf(unsortedEmbedding))
-        `when`(imageRepository.getById(1L)).thenReturn(refImage)
-        `when`(imageRepository.getById(2L)).thenReturn(unsortedImage)
+        `when`(imageRepository.getByIds(listOf(2L, 1L))).thenReturn(listOf(unsortedImage, refImage))
 
         val results = useCase(refFolder, unsortedFolder, ModelChoice.FAST, 0.5f).toList()
         val lastResult = results.last()

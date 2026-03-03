@@ -10,7 +10,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import org.mockito.ArgumentMatchers.anyList
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
 
@@ -46,7 +45,7 @@ class LoadSuggestionsUseCaseTest {
         val img10 = ImageInfo(10L, 1L, mock(Uri::class.java), "main.jpg", "h1", 10L, 1L)
         val img1 = ImageInfo(1L, 1L, mock(Uri::class.java), "a.jpg", "h2", 10L, 1L)
         val img2 = ImageInfo(2L, 1L, mock(Uri::class.java), "b.jpg", "h3", 10L, 1L)
-        `when`(imageRepository.getByIds(anyList())).thenReturn(listOf(img10, img1, img2))
+        `when`(imageRepository.getByIds(listOf(10L, 1L, 2L))).thenReturn(listOf(img10, img1, img2))
 
         val results = useCase()
 
@@ -70,7 +69,7 @@ class LoadSuggestionsUseCaseTest {
             )
         )
         `when`(suggestionRepository.getAll()).thenReturn(stored)
-        `when`(imageRepository.getByIds(anyList())).thenReturn(emptyList())
+        `when`(imageRepository.getByIds(listOf(99L, 1L))).thenReturn(emptyList())
 
         val results = useCase()
 

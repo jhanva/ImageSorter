@@ -1,6 +1,7 @@
 package com.smartfolder.data.repository
 
 import com.smartfolder.data.local.datastore.SettingsDataStore
+import com.smartfolder.domain.model.ExecutionProfile
 import com.smartfolder.domain.model.ModelChoice
 import com.smartfolder.domain.repository.SettingsRepository
 import kotlinx.coroutines.flow.Flow
@@ -16,6 +17,8 @@ class SettingsRepositoryImpl @Inject constructor(
 
     override val modelChoice: Flow<ModelChoice> = settingsDataStore.modelChoice
 
+    override val executionProfile: Flow<ExecutionProfile> = settingsDataStore.executionProfile
+
     override val darkMode: Flow<Boolean> = settingsDataStore.darkMode
 
     override suspend fun setThreshold(value: Float) {
@@ -24,6 +27,10 @@ class SettingsRepositoryImpl @Inject constructor(
 
     override suspend fun setModelChoice(choice: ModelChoice) {
         settingsDataStore.setModelChoice(choice)
+    }
+
+    override suspend fun setExecutionProfile(profile: ExecutionProfile) {
+        settingsDataStore.setExecutionProfile(profile)
     }
 
     override suspend fun setDarkMode(enabled: Boolean) {

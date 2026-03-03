@@ -24,7 +24,6 @@ import org.mockito.ArgumentMatchers.anyList
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
-import org.mockito.Mockito.verify
 
 class IndexFolderUseCaseTest {
 
@@ -134,7 +133,8 @@ class IndexFolderUseCaseTest {
         `when`(imageRepository.getByUris(listOf("content://test/image.jpg")))
             .thenReturn(listOf(existingCurrent))
         `when`(embeddingRepository.getByImageIds(anyList())).thenReturn(emptyList())
-        `when`(bitmapLoader.loadForEmbedding(any())).thenReturn(null)
+        `when`(bitmapLoader.loadForEmbedding(currentUri)).thenReturn(null)
+        `when`(bitmapLoader.loadForEmbedding(staleUri)).thenReturn(null)
 
         useCase(folder, ModelChoice.FAST).toList()
 

@@ -19,7 +19,10 @@ class EmbeddingRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getByImageIds(imageIds: List<Long>): List<Embedding> {
-        return embeddingDao.getByImageIds(imageIds).map { it.toDomain() }
+        if (imageIds.isEmpty()) return emptyList()
+        return imageIds.chunked(SQLITE_BIND_LIMIT).flatMap { chunk ->
+            embeddingDao.getByImageIds(chunk).map { it.toDomain() }
+        }
     }
 
     override suspend fun getByFolderAndModel(folderId: Long, modelName: String): List<Embedding> {
@@ -48,6 +51,10 @@ class EmbeddingRepositoryImpl @Inject constructor(
 
     override suspend fun countByFolderAndModel(folderId: Long, modelName: String): Int {
         return embeddingDao.countByFolderAndModel(folderId, modelName)
+    }
+
+    companion object {
+        private const val SQLITE_BIND_LIMIT = 900
     }
 
     private fun EmbeddingEntity.toDomain(): Embedding = Embedding(

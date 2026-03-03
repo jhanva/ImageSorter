@@ -2,10 +2,10 @@ package com.smartfolder.domain.usecase
 
 import com.smartfolder.domain.model.AnalysisPhase
 import com.smartfolder.domain.model.AnalysisProgress
+import com.smartfolder.domain.model.ExecutionProfile
 import com.smartfolder.domain.model.Folder
 import com.smartfolder.domain.model.ModelChoice
 import com.smartfolder.domain.model.SimilarMatch
-import com.smartfolder.domain.model.ImageInfo
 import com.smartfolder.domain.model.SuggestionItem
 import com.smartfolder.domain.model.StoredSuggestion
 import com.smartfolder.domain.repository.EmbeddingRepository
@@ -13,9 +13,13 @@ import com.smartfolder.domain.repository.ImageRepository
 import com.smartfolder.domain.repository.SuggestionRepository
 import com.smartfolder.ml.CentroidCalculator
 import com.smartfolder.ml.SimilarityCalculator
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.yield
+import kotlinx.coroutines.flow.flowOn
 import javax.inject.Inject
 
 class AnalyzeImagesUseCase @Inject constructor(
@@ -26,6 +30,8 @@ class AnalyzeImagesUseCase @Inject constructor(
     companion object {
         // Throttle progress emissions: emit at most every N images
         private const val PROGRESS_EMIT_INTERVAL = 50
+        private const val MAX_ANALYSIS_WORKERS = 6
+        private const val PROGRESS_EMIT_INTERVAL_MS = 250L
     }
 
     data class Result(
@@ -33,12 +39,22 @@ class AnalyzeImagesUseCase @Inject constructor(
         val progress: AnalysisProgress
     )
 
+    private data class Candidate(
+        val imageId: Long,
+        val score: Float,
+        val centroidScore: Float,
+        val topKScore: Float,
+        val topSimilarIds: List<Long>,
+        val topSimilarScores: List<Float>
+    )
+
     operator fun invoke(
         referenceFolder: Folder,
         unsortedFolder: Folder,
         modelChoice: ModelChoice,
         threshold: Float,
-        topK: Int = 3
+        topK: Int = 3,
+        executionProfile: ExecutionProfile = ExecutionProfile.BALANCED
     ): Flow<Result> = flow {
         try {
             emit(Result(emptyList(), AnalysisProgress(phase = AnalysisPhase.CENTROID)))
@@ -81,89 +97,99 @@ class AnalyzeImagesUseCase @Inject constructor(
                 total = total
             )))
 
-            val suggestions = mutableListOf<SuggestionItem>()
-            // Pre-cache image lookups for matched images to avoid repeated DB queries
-            val imageCache = mutableMapOf<Long, ImageInfo?>()
+            val safeTopK = topK.coerceAtLeast(1)
+            val cpuCount = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+            val workerCount = resolveAnalysisWorkers(executionProfile, cpuCount)
+            val chunkSize = (total / (workerCount * 4)).coerceAtLeast(PROGRESS_EMIT_INTERVAL)
+            val chunks = unsortedEmbeddings.chunked(chunkSize)
 
-            for ((index, unsortedEmb) in unsortedEmbeddings.withIndex()) {
-                // Yield periodically for coroutine cooperativeness
-                if (index % PROGRESS_EMIT_INTERVAL == 0) {
-                    yield()
-                }
+            val chunkResults = coroutineScope {
+                chunks.mapIndexed { chunkIndex, chunk ->
+                    async(Dispatchers.Default) {
+                        val localCandidates = mutableListOf<Candidate>()
+                        for (unsortedEmb in chunk) {
+                            val centroidScore = SimilarityCalculator.cosineSimilarity(unsortedEmb.vector, centroid)
+                            if (centroidScore < threshold * 0.8f) continue
 
-                // Prefilter: check centroid similarity
-                val centroidScore = SimilarityCalculator.cosineSimilarity(unsortedEmb.vector, centroid)
-                if (centroidScore < threshold * 0.8f) {
-                    // Throttle progress: only emit every N images or on last item
-                    if (index % PROGRESS_EMIT_INTERVAL == 0 || index == total - 1) {
-                        emit(Result(suggestions.toList(), AnalysisProgress(
-                            phase = AnalysisPhase.COMPARING,
-                            current = index + 1,
-                            total = total
-                        )))
-                    }
-                    continue
-                }
+                            val topKSimilarities = mutableListOf<Pair<Long, Float>>()
+                            var minInTopK = Float.MIN_VALUE
 
-                // Partial kNN: find top-K without full sort using a min-heap approach
-                val topKSimilarities = mutableListOf<Pair<Long, Float>>()
-                var minInTopK = Float.MIN_VALUE
+                            for ((imageId, refVector) in refImageVectors) {
+                                val sim = SimilarityCalculator.cosineSimilarity(unsortedEmb.vector, refVector)
+                                if (topKSimilarities.size < safeTopK) {
+                                    topKSimilarities.add(imageId to sim)
+                                    if (topKSimilarities.size == safeTopK) {
+                                        minInTopK = topKSimilarities.minOf { it.second }
+                                    }
+                                } else if (sim > minInTopK) {
+                                    val minIdx = topKSimilarities.indexOfFirst { it.second == minInTopK }
+                                    topKSimilarities[minIdx] = imageId to sim
+                                    minInTopK = topKSimilarities.minOf { it.second }
+                                }
+                            }
+                            topKSimilarities.sortByDescending { it.second }
 
-                for ((imageId, refVector) in refImageVectors) {
-                    val sim = SimilarityCalculator.cosineSimilarity(unsortedEmb.vector, refVector)
-                    if (topKSimilarities.size < topK) {
-                        topKSimilarities.add(imageId to sim)
-                        if (topKSimilarities.size == topK) {
-                            minInTopK = topKSimilarities.minOf { it.second }
+                            val topKScore = if (topKSimilarities.isNotEmpty()) {
+                                topKSimilarities.map { it.second }.average().toFloat()
+                            } else {
+                                0f
+                            }
+                            val combinedScore = SimilarityCalculator.computeScore(centroidScore, topKScore)
+                            if (combinedScore < threshold) continue
+
+                            localCandidates.add(
+                                Candidate(
+                                    imageId = unsortedEmb.imageId,
+                                    score = combinedScore,
+                                    centroidScore = centroidScore,
+                                    topKScore = topKScore,
+                                    topSimilarIds = topKSimilarities.map { it.first },
+                                    topSimilarScores = topKSimilarities.map { it.second }
+                                )
+                            )
                         }
-                    } else if (sim > minInTopK) {
-                        val minIdx = topKSimilarities.indexOfFirst { it.second == minInTopK }
-                        topKSimilarities[minIdx] = imageId to sim
-                        minInTopK = topKSimilarities.minOf { it.second }
+                        chunkIndex to localCandidates
                     }
-                }
-                topKSimilarities.sortByDescending { it.second }
+                }.awaitAll().sortedBy { it.first }
+            }
 
-                // Top-K score
-                val topKScore = if (topKSimilarities.isNotEmpty()) {
-                    topKSimilarities.map { it.second }.average().toFloat()
-                } else {
-                    0f
-                }
-
-                val combinedScore = SimilarityCalculator.computeScore(centroidScore, topKScore)
-
-                if (combinedScore >= threshold) {
-                    val unsortedImage = imageCache.getOrPut(unsortedEmb.imageId) {
-                        imageRepository.getById(unsortedEmb.imageId)
-                    } ?: continue
-
-                    val topSimilar = topKSimilarities.mapNotNull { (imageId, score) ->
-                        val image = imageCache.getOrPut(imageId) {
-                            imageRepository.getById(imageId)
-                        } ?: return@mapNotNull null
-                        SimilarMatch(image = image, score = score)
-                    }
-
-                    suggestions.add(
-                        SuggestionItem(
-                            image = unsortedImage,
-                            score = combinedScore,
-                            centroidScore = centroidScore,
-                            topKScore = topKScore,
-                            topSimilarFromA = topSimilar
-                        )
-                    )
-                }
-
-                // Throttle progress: only emit every N images or on last item
-                if (index % PROGRESS_EMIT_INTERVAL == 0 || index == total - 1) {
-                    emit(Result(suggestions.toList(), AnalysisProgress(
+            var processed = 0
+            val candidates = mutableListOf<Candidate>()
+            var lastProgressEmitAt = 0L
+            chunkResults.forEach { (_, chunkCandidates) ->
+                candidates.addAll(chunkCandidates)
+                processed = (processed + chunkSize).coerceAtMost(total)
+                val now = System.currentTimeMillis()
+                if (processed == total || (now - lastProgressEmitAt) >= PROGRESS_EMIT_INTERVAL_MS) {
+                    emit(Result(emptyList(), AnalysisProgress(
                         phase = AnalysisPhase.COMPARING,
-                        current = index + 1,
+                        current = processed,
                         total = total
                     )))
+                    lastProgressEmitAt = now
                 }
+            }
+
+            val allIds = buildSet {
+                candidates.forEach { candidate ->
+                    add(candidate.imageId)
+                    candidate.topSimilarIds.forEach { add(it) }
+                }
+            }.toList()
+            val imagesById = imageRepository.getByIds(allIds).associateBy { it.id }
+
+            val suggestions = candidates.mapNotNull { candidate ->
+                val unsortedImage = imagesById[candidate.imageId] ?: return@mapNotNull null
+                val topSimilar = candidate.topSimilarIds.zip(candidate.topSimilarScores).mapNotNull { (id, score) ->
+                    imagesById[id]?.let { SimilarMatch(image = it, score = score) }
+                }
+                SuggestionItem(
+                    image = unsortedImage,
+                    score = candidate.score,
+                    centroidScore = candidate.centroidScore,
+                    topKScore = candidate.topKScore,
+                    topSimilarFromA = topSimilar
+                )
             }
 
             // Sort by score descending
@@ -193,6 +219,14 @@ class AnalyzeImagesUseCase @Inject constructor(
                 phase = AnalysisPhase.ERROR,
                 errorMessage = e.message ?: "Unknown error during analysis"
             )))
+        }
+    }.flowOn(Dispatchers.Default)
+
+    private fun resolveAnalysisWorkers(profile: ExecutionProfile, cpuCount: Int): Int {
+        return when (profile) {
+            ExecutionProfile.BATTERY -> 1
+            ExecutionProfile.BALANCED -> (cpuCount / 3).coerceIn(1, 3)
+            ExecutionProfile.PERFORMANCE -> (cpuCount / 2).coerceIn(2, MAX_ANALYSIS_WORKERS)
         }
     }
 }

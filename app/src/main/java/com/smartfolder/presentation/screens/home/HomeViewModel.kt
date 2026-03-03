@@ -40,6 +40,11 @@ class HomeViewModel @Inject constructor(
                 updateCanAnalyze()
             }
         }
+        viewModelScope.launch {
+            settingsRepository.executionProfile.collect { profile ->
+                _uiState.value = _uiState.value.copy(executionProfile = profile)
+            }
+        }
         loadExistingFolders()
     }
 
@@ -48,8 +53,8 @@ class HomeViewModel @Inject constructor(
             val refFolders = folderRepository.getByRole(FolderRole.REFERENCE)
             val unsortedFolders = folderRepository.getByRole(FolderRole.UNSORTED)
 
-            val refFolder = refFolders.firstOrNull()
-            val unsortedFolder = unsortedFolders.firstOrNull()
+            val refFolder = refFolders.maxByOrNull { it.id }
+            val unsortedFolder = unsortedFolders.maxByOrNull { it.id }
 
             // Check if SAF permissions are still valid
             val refPermissionLost = refFolder != null &&
@@ -119,7 +124,11 @@ class HomeViewModel @Inject constructor(
         val folder = _uiState.value.referenceFolder ?: return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isIndexingRef = true)
-            indexFolderUseCase(folder, _uiState.value.modelChoice).collect { progress ->
+            indexFolderUseCase(
+                folder,
+                _uiState.value.modelChoice,
+                _uiState.value.executionProfile
+            ).collect { progress ->
                 _uiState.value = _uiState.value.copy(refIndexingProgress = progress)
                 if (progress.phase == IndexingPhase.COMPLETE || progress.phase == IndexingPhase.ERROR) {
                     val updated = folderRepository.getById(folder.id)
@@ -138,7 +147,11 @@ class HomeViewModel @Inject constructor(
         val folder = _uiState.value.unsortedFolder ?: return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isIndexingUnsorted = true)
-            indexFolderUseCase(folder, _uiState.value.modelChoice).collect { progress ->
+            indexFolderUseCase(
+                folder,
+                _uiState.value.modelChoice,
+                _uiState.value.executionProfile
+            ).collect { progress ->
                 _uiState.value = _uiState.value.copy(unsortedIndexingProgress = progress)
                 if (progress.phase == IndexingPhase.COMPLETE || progress.phase == IndexingPhase.ERROR) {
                     val updated = folderRepository.getById(folder.id)

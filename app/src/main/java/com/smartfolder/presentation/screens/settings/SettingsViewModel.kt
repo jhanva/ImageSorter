@@ -2,6 +2,7 @@ package com.smartfolder.presentation.screens.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.smartfolder.domain.model.ExecutionProfile
 import com.smartfolder.domain.model.ModelChoice
 import com.smartfolder.domain.repository.SettingsRepository
 import com.smartfolder.domain.usecase.ClearCacheUseCase
@@ -33,6 +34,11 @@ class SettingsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            settingsRepository.executionProfile.collect { profile ->
+                _uiState.value = _uiState.value.copy(executionProfile = profile)
+            }
+        }
+        viewModelScope.launch {
             settingsRepository.darkMode.collect { darkMode ->
                 _uiState.value = _uiState.value.copy(darkMode = darkMode)
             }
@@ -48,6 +54,12 @@ class SettingsViewModel @Inject constructor(
     fun setModelChoice(choice: ModelChoice) {
         viewModelScope.launch {
             settingsRepository.setModelChoice(choice)
+        }
+    }
+
+    fun setExecutionProfile(profile: ExecutionProfile) {
+        viewModelScope.launch {
+            settingsRepository.setExecutionProfile(profile)
         }
     }
 

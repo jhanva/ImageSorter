@@ -116,7 +116,10 @@ class SafManager @Inject constructor(
                 }
             }
         } catch (e: Exception) {
-            return emptyList()
+            throw IllegalStateException(
+                "Failed to list images from selected folder. Please verify folder access and try again.",
+                e
+            )
         }
 
         return results

@@ -89,6 +89,7 @@ class AnalysisWorker @AssistedInject constructor(
         }
 
         val threshold = settingsRepository.threshold.first()
+        val executionProfile = settingsRepository.executionProfile.first()
         var lastPhase = AnalysisPhase.IDLE
 
         val completed = withTimeoutOrNull(TIMEOUT_MS) {
@@ -96,7 +97,8 @@ class AnalysisWorker @AssistedInject constructor(
                 referenceFolder = refFolder,
                 unsortedFolder = unsortedFolder,
                 modelChoice = modelChoice,
-                threshold = threshold
+                threshold = threshold,
+                executionProfile = executionProfile
             ).collect { result ->
                 lastPhase = result.progress.phase
                 setProgress(

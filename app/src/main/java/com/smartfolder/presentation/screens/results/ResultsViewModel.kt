@@ -102,7 +102,7 @@ class ResultsViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isMoving = true, error = null)
 
-            val refFolder = folderRepository.getByRole(FolderRole.REFERENCE).firstOrNull()
+            val refFolder = folderRepository.getByRole(FolderRole.REFERENCE).maxByOrNull { it.id }
             if (refFolder == null) {
                 _uiState.value = _uiState.value.copy(
                     isMoving = false,
@@ -124,7 +124,7 @@ class ResultsViewModel @Inject constructor(
             }
 
             val remaining = _uiState.value.allSuggestions
-                .filter { it.image.id !in _uiState.value.acceptedIds }
+                .filter { it.image.id !in report.movedImageIds }
 
             _uiState.value = _uiState.value.copy(
                 isMoving = false,

@@ -2,6 +2,7 @@ package com.smartfolder.domain.usecase
 
 import com.smartfolder.data.saf.SafManager
 import com.smartfolder.domain.model.Embedding
+import com.smartfolder.domain.model.ExecutionProfile
 import com.smartfolder.domain.model.Folder
 import com.smartfolder.domain.model.ImageInfo
 import com.smartfolder.domain.model.IndexingPhase
@@ -13,8 +14,15 @@ import com.smartfolder.domain.repository.ImageRepository
 import com.smartfolder.domain.repository.TransactionRunner
 import com.smartfolder.ml.BitmapLoader
 import com.smartfolder.ml.ImageEmbedderWrapper
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.yield
 import javax.inject.Inject
 
@@ -29,9 +37,19 @@ class IndexFolderUseCase @Inject constructor(
 ) {
     companion object {
         private const val REGISTRATION_BATCH_SIZE = 500
+        private const val PROGRESS_EMIT_INTERVAL_MS = 250L
     }
 
-    operator fun invoke(folder: Folder, modelChoice: ModelChoice): Flow<IndexingProgress> = flow {
+    private data class IndexResult(
+        val success: Boolean,
+        val displayName: String
+    )
+
+    operator fun invoke(
+        folder: Folder,
+        modelChoice: ModelChoice,
+        executionProfile: ExecutionProfile = ExecutionProfile.BALANCED
+    ): Flow<IndexingProgress> = flow {
         emit(IndexingProgress(phase = IndexingPhase.LISTING_FILES))
 
         try {
@@ -70,63 +88,58 @@ class IndexFolderUseCase @Inject constructor(
             val existingEmbeddings = embeddingRepository.getByImageIds(allImageIds)
             val embeddingsByImageId = existingEmbeddings.associateBy { it.imageId }
 
-            var indexed = 0
+            val cpuCount = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+            val parallelism = resolveIndexParallelism(executionProfile, cpuCount)
+            val batchSize = (parallelism * 2).coerceAtLeast(1)
+
+            var processed = 0
             var failed = 0
-            for (image in dbImages) {
-                yield() // Allow cancellation between images
+            var lastProgressEmitAt = 0L
+            val embedMutex = Mutex()
 
-                // Check if embedding already exists with correct model
-                val existingEmbedding = embeddingsByImageId[image.id]
-                if (existingEmbedding != null && existingEmbedding.modelName == modelChoice.modelFileName) {
-                    indexed++
-                    emit(
-                        IndexingProgress(
-                            phase = IndexingPhase.EMBEDDING,
-                            current = indexed,
-                            total = total,
-                            currentFileName = image.displayName
-                        )
-                    )
-                    continue
-                }
-
-                // Load bitmap and compute embedding
-                val bitmap = bitmapLoader.loadForEmbedding(image.uri)
-                if (bitmap != null) {
-                    try {
-                        val vector = imageEmbedder.embed(bitmap)
-                        if (vector != null) {
-                            val embedding = Embedding(
-                                imageId = image.id,
-                                vector = vector,
-                                modelName = modelChoice.modelFileName
+            for (imageBatch in dbImages.chunked(batchSize)) {
+                val results = coroutineScope {
+                    imageBatch.map { image ->
+                        async {
+                            processImage(
+                                image = image,
+                                modelChoice = modelChoice,
+                                existingEmbedding = embeddingsByImageId[image.id],
+                                embedMutex = embedMutex
                             )
-                            existingEmbedding?.let { embeddingRepository.delete(it) }
-                            embeddingRepository.insert(embedding)
-                        } else {
-                            failed++
                         }
-                    } finally {
-                        bitmap.recycle()
-                    }
-                } else {
-                    failed++
+                    }.awaitAll()
                 }
+                yield()
 
-                indexed++
-                val statusSuffix = if (failed > 0) " ($failed failed)" else ""
-                emit(
-                    IndexingProgress(
-                        phase = IndexingPhase.EMBEDDING,
-                        current = indexed,
-                        total = total,
-                        currentFileName = image.displayName + statusSuffix
-                    )
-                )
+                results.forEachIndexed { indexInBatch, result ->
+                    processed++
+                    if (!result.success) failed++
+                    val statusSuffix = if (failed > 0) " ($failed failed)" else ""
+                    val now = System.currentTimeMillis()
+                    val isLastItem = processed == total
+                    val shouldEmit = isLastItem || (now - lastProgressEmitAt) >= PROGRESS_EMIT_INTERVAL_MS
+                    if (shouldEmit) {
+                        val currentName = if (indexInBatch == results.lastIndex) {
+                            result.displayName + statusSuffix
+                        } else {
+                            result.displayName
+                        }
+                        emit(
+                            IndexingProgress(
+                                phase = IndexingPhase.EMBEDDING,
+                                current = processed,
+                                total = total,
+                                currentFileName = currentName
+                            )
+                        )
+                        lastProgressEmitAt = now
+                    }
+                }
             }
 
             // Update folder with successful count
-            val successCount = indexed - failed
+            val successCount = processed - failed
             folderRepository.update(
                 folder.copy(
                     indexedCount = successCount,
@@ -149,6 +162,48 @@ class IndexFolderUseCase @Inject constructor(
                     errorMessage = e.message ?: "Unknown error during indexing"
                 )
             )
+        }
+    }.flowOn(Dispatchers.IO)
+
+    private fun resolveIndexParallelism(profile: ExecutionProfile, cpuCount: Int): Int {
+        return when (profile) {
+            ExecutionProfile.BATTERY -> 1
+            ExecutionProfile.BALANCED -> (cpuCount / 4).coerceIn(1, 2)
+            ExecutionProfile.PERFORMANCE -> (cpuCount / 2).coerceIn(2, 4)
+        }
+    }
+
+    private suspend fun processImage(
+        image: ImageInfo,
+        modelChoice: ModelChoice,
+        existingEmbedding: Embedding?,
+        embedMutex: Mutex
+    ): IndexResult {
+        if (existingEmbedding != null && existingEmbedding.modelName == modelChoice.modelFileName) {
+            return IndexResult(success = true, displayName = image.displayName)
+        }
+
+        val bitmap = bitmapLoader.loadForEmbedding(image.uri) ?: return IndexResult(
+            success = false,
+            displayName = image.displayName
+        )
+
+        return try {
+            val vector = embedMutex.withLock { imageEmbedder.embed(bitmap) }
+            if (vector != null) {
+                val embedding = Embedding(
+                    imageId = image.id,
+                    vector = vector,
+                    modelName = modelChoice.modelFileName
+                )
+                existingEmbedding?.let { embeddingRepository.delete(it) }
+                embeddingRepository.insert(embedding)
+                IndexResult(success = true, displayName = image.displayName)
+            } else {
+                IndexResult(success = false, displayName = image.displayName)
+            }
+        } finally {
+            bitmap.recycle()
         }
     }
 

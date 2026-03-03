@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.smartfolder.presentation.components.ExecutionProfileSelector
 import com.smartfolder.presentation.components.ModelSelector
 import com.smartfolder.presentation.components.ThresholdSlider
 
@@ -118,6 +119,16 @@ fun SettingsScreen(
             ModelSelector(
                 selected = uiState.modelChoice,
                 onSelected = { viewModel.setModelChoice(it) }
+            )
+
+            // Execution profile
+            Text(
+                text = "Execution Profile",
+                style = MaterialTheme.typography.titleMedium
+            )
+            ExecutionProfileSelector(
+                selected = uiState.executionProfile,
+                onSelected = { viewModel.setExecutionProfile(it) }
             )
 
             // Dark mode

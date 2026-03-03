@@ -20,9 +20,9 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
-    private val MIGRATION_2_3 = object : Migration(2, 3) {
-        override fun migrate(database: SupportSQLiteDatabase) {
-            database.execSQL(
+    val MIGRATION_2_3: Migration = object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
                 """
                 CREATE TABLE IF NOT EXISTS `suggestions` (
                     `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -36,8 +36,44 @@ object DatabaseModule {
                 )
                 """.trimIndent()
             )
-            database.execSQL(
+            db.execSQL(
                 "CREATE UNIQUE INDEX IF NOT EXISTS `index_suggestions_imageId` ON `suggestions` (`imageId`)"
+            )
+        }
+    }
+
+    val MIGRATION_3_4: Migration = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `decisions_new` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `imageId` INTEGER NOT NULL,
+                    `accepted` INTEGER NOT NULL,
+                    `score` REAL NOT NULL,
+                    `decidedAt` INTEGER NOT NULL,
+                    FOREIGN KEY(`imageId`) REFERENCES `images`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO `decisions_new` (`id`, `imageId`, `accepted`, `score`, `decidedAt`)
+                SELECT d.`id`, d.`imageId`, d.`accepted`, d.`score`, d.`decidedAt`
+                FROM `decisions` d
+                WHERE d.`id` = (
+                    SELECT d2.`id`
+                    FROM `decisions` d2
+                    WHERE d2.`imageId` = d.`imageId`
+                    ORDER BY d2.`decidedAt` DESC, d2.`id` DESC
+                    LIMIT 1
+                )
+                """.trimIndent()
+            )
+            db.execSQL("DROP TABLE `decisions`")
+            db.execSQL("ALTER TABLE `decisions_new` RENAME TO `decisions`")
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_decisions_imageId` ON `decisions` (`imageId`)"
             )
         }
     }
@@ -51,6 +87,7 @@ object DatabaseModule {
             "smartfolder_db"
         )
             .addMigrations(MIGRATION_2_3)
+            .addMigrations(MIGRATION_3_4)
             .build()
     }
 

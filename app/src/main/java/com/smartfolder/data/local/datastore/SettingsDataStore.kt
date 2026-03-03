@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.smartfolder.domain.model.ExecutionProfile
 import com.smartfolder.domain.model.ModelChoice
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -24,6 +25,7 @@ class SettingsDataStore @Inject constructor(
     private object Keys {
         val THRESHOLD = floatPreferencesKey("threshold")
         val MODEL_CHOICE = stringPreferencesKey("model_choice")
+        val EXECUTION_PROFILE = stringPreferencesKey("execution_profile")
         val DARK_MODE = booleanPreferencesKey("dark_mode")
     }
 
@@ -40,6 +42,15 @@ class SettingsDataStore @Inject constructor(
         }
     }
 
+    val executionProfile: Flow<ExecutionProfile> = context.dataStore.data.map { prefs ->
+        val name = prefs[Keys.EXECUTION_PROFILE] ?: ExecutionProfile.BALANCED.name
+        try {
+            ExecutionProfile.valueOf(name)
+        } catch (e: IllegalArgumentException) {
+            ExecutionProfile.BALANCED
+        }
+    }
+
     val darkMode: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[Keys.DARK_MODE] ?: false
     }
@@ -53,6 +64,12 @@ class SettingsDataStore @Inject constructor(
     suspend fun setModelChoice(choice: ModelChoice) {
         context.dataStore.edit { prefs ->
             prefs[Keys.MODEL_CHOICE] = choice.name
+        }
+    }
+
+    suspend fun setExecutionProfile(profile: ExecutionProfile) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.EXECUTION_PROFILE] = profile.name
         }
     }
 

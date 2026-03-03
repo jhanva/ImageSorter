@@ -15,7 +15,7 @@ import androidx.room.PrimaryKey
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index("imageId")]
+    indices = [Index("imageId", unique = true)]
 )
 data class DecisionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
