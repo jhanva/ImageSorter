@@ -35,7 +35,7 @@ object SimilarityCalculator {
         return if (denominator == 0f) 0f else dot / denominator
     }
 
-    fun computeScore(centroidScore: Float, topKScore: Float): Float {
-        return 0.4f * centroidScore + 0.6f * topKScore
+    fun computeScore(centroidScore: Float, topKMean: Float, topKMax: Float): Float {
+        return 0.2f * centroidScore + 0.3f * topKMean + 0.5f * topKMax
     }
 }

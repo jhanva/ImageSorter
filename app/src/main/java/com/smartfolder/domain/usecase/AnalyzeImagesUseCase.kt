@@ -53,7 +53,7 @@ class AnalyzeImagesUseCase @Inject constructor(
         unsortedFolder: Folder,
         modelChoice: ModelChoice,
         threshold: Float,
-        topK: Int = 3,
+        topK: Int = 5,
         executionProfile: ExecutionProfile = ExecutionProfile.BALANCED
     ): Flow<Result> = flow {
         try {
@@ -109,7 +109,7 @@ class AnalyzeImagesUseCase @Inject constructor(
                         val localCandidates = mutableListOf<Candidate>()
                         for (unsortedEmb in chunk) {
                             val centroidScore = SimilarityCalculator.cosineSimilarity(unsortedEmb.vector, centroid)
-                            if (centroidScore < threshold * 0.8f) continue
+                            if (centroidScore < threshold * 0.5f) continue
 
                             val topKSimilarities = mutableListOf<Pair<Long, Float>>()
                             var minInTopK = Float.MIN_VALUE
@@ -134,7 +134,12 @@ class AnalyzeImagesUseCase @Inject constructor(
                             } else {
                                 0f
                             }
-                            val combinedScore = SimilarityCalculator.computeScore(centroidScore, topKScore)
+                            val topKMax = if (topKSimilarities.isNotEmpty()) {
+                                topKSimilarities.maxOf { it.second }
+                            } else {
+                                0f
+                            }
+                            val combinedScore = SimilarityCalculator.computeScore(centroidScore, topKScore, topKMax)
                             if (combinedScore < threshold) continue
 
                             localCandidates.add(

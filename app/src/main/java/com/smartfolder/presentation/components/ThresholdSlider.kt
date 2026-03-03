@@ -22,8 +22,8 @@ fun ThresholdSlider(
         Slider(
             value = value,
             onValueChange = onValueChange,
-            valueRange = 0.50f..0.95f,
-            steps = 45,
+            valueRange = 0.30f..0.95f,
+            steps = 65,
             modifier = Modifier.fillMaxWidth()
         )
     }

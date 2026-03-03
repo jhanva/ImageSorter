@@ -2,6 +2,7 @@ package com.smartfolder.ml
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SimilarityCalculatorTest {
@@ -67,18 +68,27 @@ class SimilarityCalculatorTest {
     @Test
     fun `computeScore uses correct weights`() {
         val centroidScore = 0.8f
-        val topKScore = 0.9f
-        val expected = 0.4f * centroidScore + 0.6f * topKScore
-        assertEquals(expected, SimilarityCalculator.computeScore(centroidScore, topKScore), 0.0001f)
+        val topKMean = 0.7f
+        val topKMax = 0.9f
+        val expected = 0.2f * centroidScore + 0.3f * topKMean + 0.5f * topKMax
+        assertEquals(expected, SimilarityCalculator.computeScore(centroidScore, topKMean, topKMax), 0.0001f)
     }
 
     @Test
     fun `computeScore with zero scores returns 0`() {
-        assertEquals(0f, SimilarityCalculator.computeScore(0f, 0f), 0.0001f)
+        assertEquals(0f, SimilarityCalculator.computeScore(0f, 0f, 0f), 0.0001f)
     }
 
     @Test
     fun `computeScore with perfect scores returns 1`() {
-        assertEquals(1f, SimilarityCalculator.computeScore(1f, 1f), 0.0001f)
+        assertEquals(1f, SimilarityCalculator.computeScore(1f, 1f, 1f), 0.0001f)
+    }
+
+    @Test
+    fun `computeScore prioritizes topKMax over centroid`() {
+        // High max similarity should produce higher score than high centroid
+        val highMax = SimilarityCalculator.computeScore(0.3f, 0.5f, 0.9f)
+        val highCentroid = SimilarityCalculator.computeScore(0.9f, 0.5f, 0.3f)
+        assertTrue(highMax > highCentroid)
     }
 }

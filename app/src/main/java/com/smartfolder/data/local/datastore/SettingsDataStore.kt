@@ -30,7 +30,7 @@ class SettingsDataStore @Inject constructor(
     }
 
     val threshold: Flow<Float> = context.dataStore.data.map { prefs ->
-        prefs[Keys.THRESHOLD] ?: 0.80f
+        prefs[Keys.THRESHOLD] ?: 0.55f
     }
 
     val modelChoice: Flow<ModelChoice> = context.dataStore.data.map { prefs ->
@@ -57,7 +57,7 @@ class SettingsDataStore @Inject constructor(
 
     suspend fun setThreshold(value: Float) {
         context.dataStore.edit { prefs ->
-            prefs[Keys.THRESHOLD] = value.coerceIn(0.50f, 0.95f)
+            prefs[Keys.THRESHOLD] = value.coerceIn(0.30f, 0.95f)
         }
     }
 
