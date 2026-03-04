@@ -1,10 +1,10 @@
-# SmartFolder
+# ImageSorter
 
-Android app that organizes images into folders using on-device visual similarity. Select a reference folder with sample images, point it at an unsorted folder, and SmartFolder will suggest which images belong together -- all 100% offline with no cloud dependencies.
+Android app that organizes images into folders using on-device visual similarity. Select a reference folder with sample images, point it at an unsorted folder, and ImageSorter will suggest which images belong together -- all 100% offline with no cloud dependencies.
 
 ## How It Works
 
-SmartFolder supports two operation modes:
+ImageSorter supports two operation modes:
 
 1. **Model mode (default)**
    - Select reference folder (A) and unsorted folder (B)
