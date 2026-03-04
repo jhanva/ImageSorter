@@ -1,6 +1,7 @@
 package com.smartfolder.domain.usecase
 
 import android.net.Uri
+import com.smartfolder.data.media.MediaStoreFolderProvider
 import com.smartfolder.data.saf.SafImageFile
 import com.smartfolder.data.saf.SafManager
 import com.smartfolder.domain.model.Folder
@@ -30,6 +31,7 @@ class IndexFolderUseCaseTest {
     private lateinit var folderRepository: FolderRepository
     private lateinit var imageRepository: ImageRepository
     private lateinit var embeddingRepository: EmbeddingRepository
+    private lateinit var mediaStoreFolderProvider: MediaStoreFolderProvider
     private lateinit var safManager: SafManager
     private lateinit var bitmapLoader: BitmapLoader
     private lateinit var imageEmbedder: ImageEmbedderWrapper
@@ -43,6 +45,7 @@ class IndexFolderUseCaseTest {
         folderRepository = mock(FolderRepository::class.java)
         imageRepository = mock(ImageRepository::class.java)
         embeddingRepository = mock(EmbeddingRepository::class.java)
+        mediaStoreFolderProvider = mock(MediaStoreFolderProvider::class.java)
         safManager = mock(SafManager::class.java)
         bitmapLoader = mock(BitmapLoader::class.java)
         imageEmbedder = mock(ImageEmbedderWrapper::class.java)
@@ -51,7 +54,7 @@ class IndexFolderUseCaseTest {
         }
         useCase = IndexFolderUseCase(
             folderRepository, imageRepository, embeddingRepository,
-            safManager, bitmapLoader, imageEmbedder, transactionRunner
+            mediaStoreFolderProvider, safManager, bitmapLoader, imageEmbedder, transactionRunner
         )
     }
 

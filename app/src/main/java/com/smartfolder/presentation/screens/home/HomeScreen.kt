@@ -150,17 +150,25 @@ fun HomeScreen(
                 ErrorBanner(message = error)
             }
 
-            // Model selection
-            Text(
-                text = "Model",
-                style = MaterialTheme.typography.titleMedium
-            )
-            ModelSelector(
-                selected = uiState.modelChoice,
-                onSelected = { viewModel.setModelChoice(it) }
-            )
+            if (!uiState.manualMode) {
+                // Model selection
+                Text(
+                    text = "Model",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                ModelSelector(
+                    selected = uiState.modelChoice,
+                    onSelected = { viewModel.setModelChoice(it) }
+                )
 
-            Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+            } else {
+                Text(
+                    text = "Manual mode enabled: images from folder B will be listed directly for review and move.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
             // Reference folder (A)
             Text(
@@ -175,19 +183,21 @@ fun HomeScreen(
                 ) {
                     Text("Change Reference Folder")
                 }
-                if (uiState.isIndexingRef) {
-                    ProgressIndicator(
-                        phase = uiState.refIndexingProgress.phase.name,
-                        current = uiState.refIndexingProgress.current,
-                        total = uiState.refIndexingProgress.total,
-                        currentFileName = uiState.refIndexingProgress.currentFileName
-                    )
-                } else {
-                    Button(
-                        onClick = { viewModel.indexReferenceFolder() },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Index Reference Folder")
+                if (!uiState.manualMode) {
+                    if (uiState.isIndexingRef) {
+                        ProgressIndicator(
+                            phase = uiState.refIndexingProgress.phase.name,
+                            current = uiState.refIndexingProgress.current,
+                            total = uiState.refIndexingProgress.total,
+                            currentFileName = uiState.refIndexingProgress.currentFileName
+                        )
+                    } else {
+                        Button(
+                            onClick = { viewModel.indexReferenceFolder() },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Index Reference Folder")
+                        }
                     }
                 }
             } else {
@@ -214,19 +224,21 @@ fun HomeScreen(
                 ) {
                     Text("Change Unsorted Folder")
                 }
-                if (uiState.isIndexingUnsorted) {
-                    ProgressIndicator(
-                        phase = uiState.unsortedIndexingProgress.phase.name,
-                        current = uiState.unsortedIndexingProgress.current,
-                        total = uiState.unsortedIndexingProgress.total,
-                        currentFileName = uiState.unsortedIndexingProgress.currentFileName
-                    )
-                } else {
-                    Button(
-                        onClick = { viewModel.indexUnsortedFolder() },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Index Unsorted Folder")
+                if (!uiState.manualMode) {
+                    if (uiState.isIndexingUnsorted) {
+                        ProgressIndicator(
+                            phase = uiState.unsortedIndexingProgress.phase.name,
+                            current = uiState.unsortedIndexingProgress.current,
+                            total = uiState.unsortedIndexingProgress.total,
+                            currentFileName = uiState.unsortedIndexingProgress.currentFileName
+                        )
+                    } else {
+                        Button(
+                            onClick = { viewModel.indexUnsortedFolder() },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Index Unsorted Folder")
+                        }
                     }
                 }
             } else {
@@ -246,7 +258,7 @@ fun HomeScreen(
                 enabled = uiState.canAnalyze && !uiState.isIndexingRef && !uiState.isIndexingUnsorted,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Analyze Images")
+                Text(if (uiState.manualMode) "Load Images for Manual Review" else "Analyze Images")
             }
         }
     }

@@ -27,6 +27,7 @@ class SettingsDataStore @Inject constructor(
         val MODEL_CHOICE = stringPreferencesKey("model_choice")
         val EXECUTION_PROFILE = stringPreferencesKey("execution_profile")
         val DARK_MODE = booleanPreferencesKey("dark_mode")
+        val MANUAL_MODE = booleanPreferencesKey("manual_mode")
     }
 
     val threshold: Flow<Float> = context.dataStore.data.map { prefs ->
@@ -55,6 +56,10 @@ class SettingsDataStore @Inject constructor(
         prefs[Keys.DARK_MODE] ?: false
     }
 
+    val manualMode: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[Keys.MANUAL_MODE] ?: false
+    }
+
     suspend fun setThreshold(value: Float) {
         context.dataStore.edit { prefs ->
             prefs[Keys.THRESHOLD] = value.coerceIn(0.30f, 0.95f)
@@ -76,6 +81,12 @@ class SettingsDataStore @Inject constructor(
     suspend fun setDarkMode(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[Keys.DARK_MODE] = enabled
+        }
+    }
+
+    suspend fun setManualMode(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.MANUAL_MODE] = enabled
         }
     }
 }

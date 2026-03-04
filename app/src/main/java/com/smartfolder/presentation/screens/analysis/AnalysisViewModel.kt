@@ -7,18 +7,22 @@ import com.smartfolder.domain.model.FolderRole
 import com.smartfolder.domain.repository.FolderRepository
 import com.smartfolder.domain.repository.SettingsRepository
 import com.smartfolder.domain.usecase.AnalyzeImagesUseCase
+import com.smartfolder.domain.usecase.BuildManualSuggestionsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
 class AnalysisViewModel @Inject constructor(
     private val analyzeImagesUseCase: AnalyzeImagesUseCase,
+    private val buildManualSuggestionsUseCase: BuildManualSuggestionsUseCase,
     private val folderRepository: FolderRepository,
     private val settingsRepository: SettingsRepository
 ) : ViewModel() {
@@ -31,43 +35,67 @@ class AnalysisViewModel @Inject constructor(
     fun startAnalysis() {
         if (_uiState.value.isAnalyzing) return
         analysisJob = viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isAnalyzing = true, error = null)
+            try {
+                _uiState.value = _uiState.value.copy(isAnalyzing = true, error = null)
 
-            val refFolder = folderRepository.getByRole(FolderRole.REFERENCE).maxByOrNull { it.id }
-            val unsortedFolder = folderRepository.getByRole(FolderRole.UNSORTED).maxByOrNull { it.id }
+                val refFolder = folderRepository.getByRole(FolderRole.REFERENCE).maxByOrNull { it.id }
+                val unsortedFolder = folderRepository.getByRole(FolderRole.UNSORTED).maxByOrNull { it.id }
 
-            if (refFolder == null || unsortedFolder == null) {
-                _uiState.value = _uiState.value.copy(
-                    isAnalyzing = false,
-                    error = "Both folders must be selected and indexed"
-                )
-                return@launch
-            }
-
-            val modelChoice = settingsRepository.modelChoice.first()
-            val executionProfile = settingsRepository.executionProfile.first()
-            val threshold = settingsRepository.threshold.first()
-
-            analyzeImagesUseCase(
-                referenceFolder = refFolder,
-                unsortedFolder = unsortedFolder,
-                modelChoice = modelChoice,
-                threshold = threshold,
-                executionProfile = executionProfile
-            ).collect { result ->
-                _uiState.value = _uiState.value.copy(
-                    progress = result.progress,
-                    suggestions = result.suggestions
-                )
-                if (result.progress.phase == AnalysisPhase.COMPLETE) {
-                    _uiState.value = _uiState.value.copy(isAnalyzing = false)
-                }
-                if (result.progress.phase == AnalysisPhase.ERROR) {
+                if (refFolder == null || unsortedFolder == null) {
                     _uiState.value = _uiState.value.copy(
                         isAnalyzing = false,
-                        error = result.progress.errorMessage
+                        error = "Both folders must be selected"
                     )
+                    return@launch
                 }
+
+                val manualMode = settingsRepository.manualMode.first()
+                if (manualMode) {
+                    val suggestions = withContext(Dispatchers.IO) {
+                        buildManualSuggestionsUseCase(unsortedFolder)
+                    }
+                    _uiState.value = _uiState.value.copy(
+                        suggestions = suggestions,
+                        progress = _uiState.value.progress.copy(
+                            phase = AnalysisPhase.COMPLETE,
+                            current = suggestions.size,
+                            total = suggestions.size
+                        ),
+                        isAnalyzing = false
+                    )
+                    return@launch
+                }
+
+                val modelChoice = settingsRepository.modelChoice.first()
+                val executionProfile = settingsRepository.executionProfile.first()
+                val threshold = settingsRepository.threshold.first()
+
+                analyzeImagesUseCase(
+                    referenceFolder = refFolder,
+                    unsortedFolder = unsortedFolder,
+                    modelChoice = modelChoice,
+                    threshold = threshold,
+                    executionProfile = executionProfile
+                ).collect { result ->
+                    _uiState.value = _uiState.value.copy(
+                        progress = result.progress,
+                        suggestions = result.suggestions
+                    )
+                    if (result.progress.phase == AnalysisPhase.COMPLETE) {
+                        _uiState.value = _uiState.value.copy(isAnalyzing = false)
+                    }
+                    if (result.progress.phase == AnalysisPhase.ERROR) {
+                        _uiState.value = _uiState.value.copy(
+                            isAnalyzing = false,
+                            error = result.progress.errorMessage
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isAnalyzing = false,
+                    error = e.message ?: "Unknown error while loading manual suggestions"
+                )
             }
         }
     }

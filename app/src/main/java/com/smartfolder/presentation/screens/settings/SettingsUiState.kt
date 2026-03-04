@@ -8,6 +8,7 @@ data class SettingsUiState(
     val modelChoice: ModelChoice = ModelChoice.FAST,
     val executionProfile: ExecutionProfile = ExecutionProfile.BALANCED,
     val darkMode: Boolean = false,
+    val manualMode: Boolean = false,
     val isClearingCache: Boolean = false,
     val message: String? = null
 )

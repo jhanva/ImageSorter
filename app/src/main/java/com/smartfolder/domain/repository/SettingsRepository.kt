@@ -9,8 +9,10 @@ interface SettingsRepository {
     val modelChoice: Flow<ModelChoice>
     val executionProfile: Flow<ExecutionProfile>
     val darkMode: Flow<Boolean>
+    val manualMode: Flow<Boolean>
     suspend fun setThreshold(value: Float)
     suspend fun setModelChoice(choice: ModelChoice)
     suspend fun setExecutionProfile(profile: ExecutionProfile)
     suspend fun setDarkMode(enabled: Boolean)
+    suspend fun setManualMode(enabled: Boolean)
 }

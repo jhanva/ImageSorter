@@ -157,7 +157,8 @@ fun ResultsScreen(
                 uiState.isReviewing -> ReviewCard(
                     uiState = uiState,
                     onAccept = { viewModel.acceptCurrent() },
-                    onSkip = { viewModel.skipCurrent() }
+                    onSkip = { viewModel.skipCurrent() },
+                    onFinishEarly = { viewModel.finishReviewNow() }
                 )
                 else -> SuggestionsList(
                     uiState = uiState,
@@ -223,7 +224,8 @@ private fun SuggestionsList(
 private fun ReviewCard(
     uiState: ResultsUiState,
     onAccept: () -> Unit,
-    onSkip: () -> Unit
+    onSkip: () -> Unit,
+    onFinishEarly: () -> Unit
 ) {
     val suggestion = uiState.currentSuggestion ?: return
 
@@ -320,6 +322,15 @@ private fun ReviewCard(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Move")
             }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        OutlinedButton(
+            onClick = onFinishEarly,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Stop review and continue to move")
         }
     }
 }

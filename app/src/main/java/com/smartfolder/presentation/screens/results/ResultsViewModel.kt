@@ -91,10 +91,20 @@ class ResultsViewModel @Inject constructor(
         advanceReview()
     }
 
+    fun finishReviewNow() {
+        _uiState.value = _uiState.value.copy(
+            isReviewing = false,
+            reviewComplete = true
+        )
+    }
+
     private fun advanceReview() {
         val nextIndex = _uiState.value.currentReviewIndex + 1
         if (nextIndex >= _uiState.value.filteredSuggestions.size) {
-            _uiState.value = _uiState.value.copy(reviewComplete = true)
+            _uiState.value = _uiState.value.copy(
+                isReviewing = false,
+                reviewComplete = true
+            )
         } else {
             _uiState.value = _uiState.value.copy(currentReviewIndex = nextIndex)
         }

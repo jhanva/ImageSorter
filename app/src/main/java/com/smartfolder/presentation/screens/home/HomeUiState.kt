@@ -10,6 +10,7 @@ data class HomeUiState(
     val referenceFolder: Folder? = null,
     val unsortedFolder: Folder? = null,
     val modelChoice: ModelChoice = ModelChoice.FAST,
+    val manualMode: Boolean = false,
     val executionProfile: ExecutionProfile = ExecutionProfile.BALANCED,
     val refIndexingProgress: IndexingProgress = IndexingProgress(),
     val unsortedIndexingProgress: IndexingProgress = IndexingProgress(),

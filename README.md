@@ -4,20 +4,32 @@ Android app that organizes images into folders using on-device visual similarity
 
 ## How It Works
 
-1. **Select folders** -- Pick a reference folder (A) containing example images and an unsorted folder (B) with images to classify.
-2. **Index** -- The app generates ML embeddings for each image using MediaPipe's MobileNet V3 models.
-3. **Analyze** -- SmartFolder computes a centroid of folder A's embeddings, pre-filters candidates, then runs k-nearest-neighbor scoring against individual images.
-4. **Review** -- Browse suggestions one by one, accept or skip each image, then move accepted images to the reference folder.
+SmartFolder supports two operation modes:
+
+1. **Model mode (default)**
+   - Select reference folder (A) and unsorted folder (B)
+   - Index both folders
+   - Analyze similarities
+   - Review suggestions and move accepted images to A
+2. **Manual mode**
+   - Select folders A and B
+   - Load all images from B directly (no model scoring required)
+   - Review and move accepted images to A
+
+During review, you can stop early and move only what has been accepted so far.
 
 ### Scoring
 
-Each unsorted image receives a combined score:
+In model mode, each unsorted image receives a combined score:
 
 ```
-score = 0.4 * cosine(image, centroid_A) + 0.6 * mean(top-K similarities to A)
+score = 0.2 * centroidScore + 0.3 * topKMean + 0.5 * topKMax
 ```
 
-The top 3 most similar reference images are displayed alongside each suggestion for visual explanation.
+Additional details:
+- Default `topK = 5`
+- Centroid pre-filter uses `threshold * 0.5`
+- Top similar reference matches are shown alongside each suggestion for visual explanation
 
 ## Architecture
 
@@ -51,6 +63,7 @@ Presentation  (Jetpack Compose + ViewModels + StateFlow)
 
 - **SAF-only file access** -- No dangerous permissions. Uses `ACTION_OPEN_DOCUMENT_TREE` with persistable URI permissions.
 - **ContentResolver queries** -- Folder listing uses `DocumentsContract` queries instead of `DocumentFile.listFiles()` for 10-100x faster enumeration of large folders.
+- **MediaStore-first listing for folder analysis/indexing** -- Uses `documentId`-based MediaStore lookup first, with SAF fallback for compatibility.
 - **GPU with CPU fallback** -- MediaPipe attempts GPU delegate first, falls back to CPU automatically.
 - **Incremental indexing** -- Embeddings are cached in Room keyed by `contentHash` (file size + last modified). Only changed or new images are re-processed.
 - **Batch operations** -- Image registration and embedding lookups use chunked batch queries to minimize database round-trips.
@@ -82,7 +95,7 @@ app/src/main/java/com/smartfolder/
       home/                      Folder selection + indexing
       analysis/                  Analysis progress
       results/                   Review suggestions + move images
-      settings/                  Threshold, model, dark mode
+      settings/                  Threshold, model, execution profile, manual mode, dark mode
 ```
 
 ## Building
@@ -129,9 +142,11 @@ Available in the Settings screen:
 
 | Setting | Default | Range |
 |---------|---------|-------|
-| Similarity threshold | 0.80 | 0.70 -- 0.95 |
+| Similarity threshold | 0.55 | 0.30 -- 0.95 |
 | Embedding model | Fast (MobileNet V3 Small) | Fast / Precise |
-| Dark mode | System default | On / Off |
+| Execution profile | Balanced | Battery / Balanced / Performance |
+| Manual mode | Off | On / Off |
+| Dark mode | Off | On / Off |
 
 ## Requirements
 

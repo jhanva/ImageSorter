@@ -47,6 +47,12 @@ class HomeViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(executionProfile = profile)
             }
         }
+        viewModelScope.launch {
+            settingsRepository.manualMode.collect { manualMode ->
+                _uiState.value = _uiState.value.copy(manualMode = manualMode)
+                updateCanAnalyze()
+            }
+        }
         loadExistingFolders()
         refreshAvailableImageFolders()
     }
@@ -198,6 +204,10 @@ class HomeViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
+            if (_uiState.value.manualMode) {
+                _uiState.value = _uiState.value.copy(canAnalyze = true)
+                return@launch
+            }
             val model = _uiState.value.modelChoice
             val refCount = embeddingRepository.countByFolderAndModel(ref.id, model.modelFileName)
             val unsortedCount = embeddingRepository.countByFolderAndModel(unsorted.id, model.modelFileName)

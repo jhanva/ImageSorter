@@ -147,6 +147,29 @@ fun SettingsScreen(
                 )
             }
 
+            // Manual mode
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Manual Mode",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = "Show all images from folder B without model scoring",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = uiState.manualMode,
+                    onCheckedChange = { viewModel.setManualMode(it) }
+                )
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
 
             // Clear cache
