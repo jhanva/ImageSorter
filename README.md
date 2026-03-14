@@ -114,6 +114,21 @@ app/src/main/java/com/smartfolder/
 
 ML models (MobileNet V3 small and large) are downloaded automatically during the first build via a Gradle task hooked into `preBuild`. The download includes retry logic, timeouts, and file size validation.
 
+## Versioning And Releases
+
+- Canonical app version lives in `version.properties`.
+- Local or CI builds can override it with `VERSION_NAME` and `VERSION_CODE` as environment variables or Gradle properties.
+- Pushing a Git tag like `v0.1.0` triggers the GitHub Actions workflow in `.github/workflows/release.yml`.
+- Each tagged build publishes a GitHub Release with the debug APK, the release APK, and `SHA256SUMS.txt`.
+- If repository secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEY_ALIAS`, `ANDROID_KEYSTORE_PASSWORD`, and `ANDROID_KEY_PASSWORD` are configured, the workflow signs the release APK before publishing it.
+
+Example:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
 ### Tests
 
 ```bash

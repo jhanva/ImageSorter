@@ -1,8 +1,26 @@
 import java.net.URL
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.util.Properties
 import com.android.build.gradle.internal.api.BaseVariantOutputImpl
+
+val versionProperties = Properties().apply {
+    val file = rootProject.file("version.properties")
+    if (file.exists()) {
+        file.inputStream().use(::load)
+    }
+}
+
+fun versionSetting(
+    name: String,
+    defaultValue: String
+): String {
+    return providers.environmentVariable(name).orNull
+        ?: providers.gradleProperty(name).orNull
+        ?: versionProperties.getProperty(name)
+        ?: defaultValue
+}
+
+val appVersionName = versionSetting("VERSION_NAME", "0.1.0")
+val appVersionCode = versionSetting("VERSION_CODE", "1").toIntOrNull() ?: 1
 
 plugins {
     id("com.android.application")
@@ -19,8 +37,8 @@ android {
         applicationId = "com.smartfolder"
         minSdk = 28
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -69,8 +87,7 @@ android {
 
 android.applicationVariants.all {
     outputs.all {
-        val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
-        val fileName = "ImageSorter-v${versionName}(${versionCode})-${buildType.name}-$timestamp.apk"
+        val fileName = "ImageSorter-v${versionName}(${versionCode})-${buildType.name}.apk"
         (this as BaseVariantOutputImpl).outputFileName = fileName
     }
 }
