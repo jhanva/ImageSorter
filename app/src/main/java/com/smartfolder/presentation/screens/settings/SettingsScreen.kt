@@ -159,7 +159,7 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.titleMedium
                     )
                     Text(
-                        text = "Show all images from folder B without model scoring",
+                        text = "Show all images from folder B in a selectable thumbnail grid without model scoring",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

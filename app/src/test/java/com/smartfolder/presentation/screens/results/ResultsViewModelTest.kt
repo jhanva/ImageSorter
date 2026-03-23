@@ -1,0 +1,169 @@
+package com.smartfolder.presentation.screens.results
+
+import android.net.Uri
+import com.smartfolder.domain.model.ExecutionProfile
+import com.smartfolder.domain.model.ImageInfo
+import com.smartfolder.domain.model.ModelChoice
+import com.smartfolder.domain.model.SuggestionItem
+import com.smartfolder.domain.repository.FolderRepository
+import com.smartfolder.domain.repository.SettingsRepository
+import com.smartfolder.domain.repository.SuggestionRepository
+import com.smartfolder.domain.usecase.AcceptSuggestionUseCase
+import com.smartfolder.domain.usecase.GetSuggestionsUseCase
+import com.smartfolder.domain.usecase.LoadSuggestionsUseCase
+import com.smartfolder.domain.usecase.MoveImagesUseCase
+import com.smartfolder.domain.usecase.RejectSuggestionUseCase
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.mockito.Mockito.mock
+import org.mockito.Mockito.`when`
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class ResultsViewModelTest {
+
+    @get:Rule
+    val mainDispatcherRule = MainDispatcherRule()
+
+    private lateinit var getSuggestionsUseCase: GetSuggestionsUseCase
+    private lateinit var moveImagesUseCase: MoveImagesUseCase
+    private lateinit var acceptSuggestionUseCase: AcceptSuggestionUseCase
+    private lateinit var rejectSuggestionUseCase: RejectSuggestionUseCase
+    private lateinit var folderRepository: FolderRepository
+    private lateinit var loadSuggestionsUseCase: LoadSuggestionsUseCase
+    private lateinit var suggestionRepository: SuggestionRepository
+    private lateinit var settingsRepository: FakeSettingsRepository
+
+    private val firstSuggestion = suggestion(
+        id = 1L,
+        name = "first.jpg",
+        score = 0.25f
+    )
+    private val secondSuggestion = suggestion(
+        id = 2L,
+        name = "second.jpg",
+        score = 0.10f
+    )
+    private val allSuggestions = listOf(firstSuggestion, secondSuggestion)
+
+    @Before
+    fun setup() {
+        getSuggestionsUseCase = mock(GetSuggestionsUseCase::class.java)
+        moveImagesUseCase = mock(MoveImagesUseCase::class.java)
+        acceptSuggestionUseCase = mock(AcceptSuggestionUseCase::class.java)
+        rejectSuggestionUseCase = mock(RejectSuggestionUseCase::class.java)
+        folderRepository = mock(FolderRepository::class.java)
+        loadSuggestionsUseCase = mock(LoadSuggestionsUseCase::class.java)
+        suggestionRepository = mock(SuggestionRepository::class.java)
+        settingsRepository = FakeSettingsRepository(
+            threshold = 0.80f,
+            manualMode = true
+        )
+    }
+
+    @Test
+    fun `manual mode keeps every loaded suggestion visible`() = runTest(mainDispatcherRule.dispatcher) {
+        val viewModel = createViewModel()
+
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state.manualMode)
+        assertEquals(2, state.allSuggestions.size)
+        assertEquals(2, state.filteredSuggestions.size)
+        assertEquals(listOf(1L, 2L), state.filteredSuggestions.map { it.image.id })
+    }
+
+    @Test
+    fun `manual mode supports toggle select all and clear`() = runTest(mainDispatcherRule.dispatcher) {
+        val viewModel = createViewModel()
+
+        advanceUntilIdle()
+        viewModel.toggleSelection(1L)
+        assertEquals(setOf(1L), viewModel.uiState.value.selectedIds)
+
+        viewModel.selectAllFiltered()
+        assertEquals(setOf(1L, 2L), viewModel.uiState.value.selectedIds)
+
+        viewModel.clearSelection()
+        assertTrue(viewModel.uiState.value.selectedIds.isEmpty())
+    }
+
+    @Test
+    fun `manual mode returns uris for selected images`() = runTest(mainDispatcherRule.dispatcher) {
+        val viewModel = createViewModel()
+
+        advanceUntilIdle()
+        viewModel.toggleSelection(2L)
+
+        val uris = viewModel.getAcceptedImageUris()
+
+        assertEquals(listOf(secondSuggestion.image.uri), uris)
+    }
+
+    private suspend fun createViewModel(): ResultsViewModel {
+        `when`(loadSuggestionsUseCase.invoke()).thenReturn(allSuggestions)
+        `when`(getSuggestionsUseCase.invoke(emptyList(), 0.80f)).thenReturn(emptyList())
+        return ResultsViewModel(
+            getSuggestionsUseCase = getSuggestionsUseCase,
+            moveImagesUseCase = moveImagesUseCase,
+            acceptSuggestionUseCase = acceptSuggestionUseCase,
+            rejectSuggestionUseCase = rejectSuggestionUseCase,
+            folderRepository = folderRepository,
+            settingsRepository = settingsRepository,
+            loadSuggestionsUseCase = loadSuggestionsUseCase,
+            suggestionRepository = suggestionRepository
+        )
+    }
+
+    private fun suggestion(
+        id: Long,
+        name: String,
+        score: Float
+    ): SuggestionItem {
+        return SuggestionItem(
+            image = ImageInfo(
+                id = id,
+                folderId = 10L,
+                uri = mock(Uri::class.java),
+                displayName = name,
+                contentHash = "hash-$id",
+                sizeBytes = 100L + id,
+                lastModified = 1000L + id
+            ),
+            score = score,
+            centroidScore = score,
+            topKScore = score,
+            topSimilarFromA = emptyList()
+        )
+    }
+
+    private class FakeSettingsRepository(
+        threshold: Float,
+        manualMode: Boolean
+    ) : SettingsRepository {
+        override val threshold: Flow<Float> = MutableStateFlow(threshold)
+        override val modelChoice: Flow<ModelChoice> = flowOf(ModelChoice.FAST)
+        override val executionProfile: Flow<ExecutionProfile> = flowOf(ExecutionProfile.BALANCED)
+        override val darkMode: Flow<Boolean> = flowOf(false)
+        override val manualMode: Flow<Boolean> = MutableStateFlow(manualMode)
+
+        override suspend fun setThreshold(value: Float) = Unit
+
+        override suspend fun setModelChoice(choice: ModelChoice) = Unit
+
+        override suspend fun setExecutionProfile(profile: ExecutionProfile) = Unit
+
+        override suspend fun setDarkMode(enabled: Boolean) = Unit
+
+        override suspend fun setManualMode(enabled: Boolean) = Unit
+    }
+}

@@ -164,7 +164,7 @@ fun HomeScreen(
                 Spacer(modifier = Modifier.height(8.dp))
             } else {
                 Text(
-                    text = "Manual mode enabled: images from folder B will be listed directly for review and move.",
+                    text = "Manual mode enabled: images from folder B will be shown in a selectable thumbnail grid for batch move.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
