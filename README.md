@@ -10,13 +10,25 @@ ImageSorter supports two operation modes:
    - Select reference folder (A) and unsorted folder (B)
    - Index both folders
    - Analyze similarities
-   - Review suggestions and move accepted images to A
+   - Review suggestions one by one and move accepted images to A
 2. **Manual mode**
    - Select folders A and B
    - Load all images from B directly (no model scoring required)
-   - Review and move accepted images to A
+   - Show the full batch from B in a scrollable thumbnail grid
+   - Tap thumbnails to select images, then move the selected batch to A
 
-During review, you can stop early and move only what has been accepted so far.
+During model review, you can stop early and move only what has been accepted so far.
+
+### Manual Batch Review
+
+Manual mode is designed for cases where the embedding suggestions are not reliable enough.
+
+- Displays the complete contents of folder B in a lazy thumbnail grid suitable for large folders
+- Uses direct thumbnail selection instead of one-by-one review
+- Includes quick actions to select all images or clear the current selection
+- Reuses the same move flow and write-permission prompts already used by the app
+
+Manual mode does not use threshold filtering or similarity scoring in the results screen.
 
 ### Scoring
 
@@ -94,7 +106,7 @@ app/src/main/java/com/smartfolder/
     screens/
       home/                      Folder selection + indexing
       analysis/                  Analysis progress
-      results/                   Review suggestions + move images
+      results/                   Model review or manual batch selection + move images
       settings/                  Threshold, model, execution profile, manual mode, dark mode
 ```
 
@@ -118,15 +130,15 @@ ML models (MobileNet V3 small and large) are downloaded automatically during the
 
 - Canonical app version lives in `version.properties`.
 - Local or CI builds can override it with `VERSION_NAME` and `VERSION_CODE` as environment variables or Gradle properties.
-- Pushing a Git tag like `v0.1.0` triggers the GitHub Actions workflow in `.github/workflows/release.yml`.
+- Pushing a Git tag like `v0.2.0` triggers the GitHub Actions workflow in `.github/workflows/release.yml`.
 - Each tagged build publishes a GitHub Release with the debug APK, the release APK, and `SHA256SUMS.txt`.
 - If repository secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEY_ALIAS`, `ANDROID_KEYSTORE_PASSWORD`, and `ANDROID_KEY_PASSWORD` are configured, the workflow signs the release APK before publishing it.
 
 Example:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 ### Tests
@@ -146,6 +158,7 @@ Unit tests cover:
 - `IndexFolderUseCase` -- indexing pipeline
 - `AnalyzeImagesUseCase` -- analysis pipeline
 - `MoveImagesUseCase` -- file move operations
+- `ResultsViewModel` -- manual batch selection state and selected-image resolution
 
 Instrumented tests cover:
 - `FolderDao` -- CRUD operations
@@ -162,6 +175,10 @@ Available in the Settings screen:
 | Execution profile | Balanced | Battery / Balanced / Performance |
 | Manual mode | Off | On / Off |
 | Dark mode | Off | On / Off |
+
+Notes:
+- In manual mode, folder B is shown as a full thumbnail grid instead of scored suggestions.
+- Threshold only affects model mode.
 
 ## Requirements
 
