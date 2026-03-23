@@ -7,6 +7,8 @@ data class ResultsUiState(
     val filteredSuggestions: List<SuggestionItem> = emptyList(),
     val isDebugTopFallback: Boolean = false,
     val threshold: Float = 0.80f,
+    val manualMode: Boolean = false,
+    val selectedIds: Set<Long> = emptySet(),
     // Review mode: one-by-one image review
     val isReviewing: Boolean = false,
     val currentReviewIndex: Int = 0,
@@ -26,6 +28,11 @@ data class ResultsUiState(
             "${currentReviewIndex + 1} / ${filteredSuggestions.size}"
         } else ""
 
+    val selectedCount: Int get() = selectedIds.size
     val acceptedCount: Int get() = acceptedIds.size
     val skippedCount: Int get() = skippedIds.size
+    val moveCandidateIds: Set<Long>
+        get() = if (manualMode) selectedIds else acceptedIds
+    val moveCandidateCount: Int
+        get() = moveCandidateIds.size
 }

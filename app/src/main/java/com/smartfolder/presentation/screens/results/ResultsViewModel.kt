@@ -45,6 +45,18 @@ class ResultsViewModel @Inject constructor(
             applyFilter()
         }
         viewModelScope.launch {
+            settingsRepository.manualMode.collect { manualMode ->
+                _uiState.value = _uiState.value.copy(
+                    manualMode = manualMode,
+                    isReviewing = if (manualMode) false else _uiState.value.isReviewing,
+                    reviewComplete = if (manualMode) false else _uiState.value.reviewComplete,
+                    currentReviewIndex = if (manualMode) 0 else _uiState.value.currentReviewIndex,
+                    selectedIds = if (manualMode) _uiState.value.selectedIds else emptySet()
+                )
+                applyFilter()
+            }
+        }
+        viewModelScope.launch {
             val stored = loadSuggestionsUseCase()
             if (stored.isNotEmpty()) {
                 _uiState.value = _uiState.value.copy(allSuggestions = stored)
@@ -62,6 +74,7 @@ class ResultsViewModel @Inject constructor(
     }
 
     fun startReview() {
+        if (_uiState.value.manualMode) return
         _uiState.value = _uiState.value.copy(
             isReviewing = true,
             currentReviewIndex = 0,
@@ -72,6 +85,7 @@ class ResultsViewModel @Inject constructor(
     }
 
     fun acceptCurrent() {
+        if (_uiState.value.manualMode) return
         val current = _uiState.value.currentSuggestion ?: return
         viewModelScope.launch {
             acceptSuggestionUseCase(current)
@@ -82,6 +96,7 @@ class ResultsViewModel @Inject constructor(
     }
 
     fun skipCurrent() {
+        if (_uiState.value.manualMode) return
         val current = _uiState.value.currentSuggestion ?: return
         viewModelScope.launch {
             rejectSuggestionUseCase(current)
@@ -92,10 +107,35 @@ class ResultsViewModel @Inject constructor(
     }
 
     fun finishReviewNow() {
+        if (_uiState.value.manualMode) return
         _uiState.value = _uiState.value.copy(
             isReviewing = false,
             reviewComplete = true
         )
+    }
+
+    fun toggleSelection(imageId: Long) {
+        if (!_uiState.value.manualMode) return
+        val selectedIds = _uiState.value.selectedIds
+        _uiState.value = _uiState.value.copy(
+            selectedIds = if (imageId in selectedIds) {
+                selectedIds - imageId
+            } else {
+                selectedIds + imageId
+            }
+        )
+    }
+
+    fun selectAllFiltered() {
+        if (!_uiState.value.manualMode) return
+        _uiState.value = _uiState.value.copy(
+            selectedIds = _uiState.value.filteredSuggestions.mapTo(linkedSetOf()) { it.image.id }
+        )
+    }
+
+    fun clearSelection() {
+        if (!_uiState.value.manualMode) return
+        _uiState.value = _uiState.value.copy(selectedIds = emptySet())
     }
 
     private fun advanceReview() {
@@ -123,8 +163,9 @@ class ResultsViewModel @Inject constructor(
                 return@launch
             }
 
+            val selectedIds = _uiState.value.moveCandidateIds
             val acceptedImages = _uiState.value.filteredSuggestions
-                .filter { it.image.id in _uiState.value.acceptedIds }
+                .filter { it.image.id in selectedIds }
                 .map { it.image }
 
             val report = moveImagesUseCase(acceptedImages, refFolder.uri)
@@ -143,6 +184,7 @@ class ResultsViewModel @Inject constructor(
                 allSuggestions = remaining,
                 isReviewing = false,
                 reviewComplete = false,
+                selectedIds = emptySet(),
                 acceptedIds = emptySet(),
                 skippedIds = emptySet(),
                 moveResultMessage = message
@@ -153,8 +195,9 @@ class ResultsViewModel @Inject constructor(
     }
 
     fun getAcceptedImageUris(): List<Uri> {
+        val selectedIds = _uiState.value.moveCandidateIds
         return _uiState.value.filteredSuggestions
-            .filter { it.image.id in _uiState.value.acceptedIds }
+            .filter { it.image.id in selectedIds }
             .map { it.image.uri }
     }
 
@@ -163,6 +206,10 @@ class ResultsViewModel @Inject constructor(
     }
 
     fun cancelReview() {
+        if (_uiState.value.manualMode) {
+            _uiState.value = _uiState.value.copy(selectedIds = emptySet())
+            return
+        }
         _uiState.value = _uiState.value.copy(
             isReviewing = false,
             reviewComplete = false,
@@ -177,6 +224,13 @@ class ResultsViewModel @Inject constructor(
     }
 
     private fun applyFilter() {
+        if (_uiState.value.manualMode) {
+            _uiState.value = _uiState.value.copy(
+                filteredSuggestions = _uiState.value.allSuggestions,
+                isDebugTopFallback = false
+            )
+            return
+        }
         val filtered = getSuggestionsUseCase(
             _uiState.value.allSuggestions,
             _uiState.value.threshold
