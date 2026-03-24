@@ -174,6 +174,7 @@ fun ResultsScreen(
                     onToggleSectionSelection = viewModel::toggleSectionSelection,
                     onSelectAll = viewModel::selectAllFiltered,
                     onClearSelection = viewModel::clearSelection,
+                    onSelectBestInDuplicateGroups = viewModel::selectBestInVisibleDuplicateGroups,
                     onSelectBestInVisualGroups = viewModel::selectBestInVisibleVisualGroups,
                     onSelectBestInGroups = viewModel::selectBestInVisibleNameGroups,
                     onSelectBatchLeads = viewModel::selectVisibleBatchLeads,
@@ -262,6 +263,7 @@ private fun ManualSelectionContent(
     onToggleSectionSelection: (Set<Long>) -> Unit,
     onSelectAll: () -> Unit,
     onClearSelection: () -> Unit,
+    onSelectBestInDuplicateGroups: () -> Unit,
     onSelectBestInVisualGroups: () -> Unit,
     onSelectBestInGroups: () -> Unit,
     onSelectBatchLeads: () -> Unit,
@@ -377,16 +379,26 @@ private fun ManualSelectionContent(
 
                 OutlinedButton(
                     onClick = {
-                        if (uiState.manualVisibleVisualGroupCount > 0) {
+                        if (uiState.manualVisibleDuplicateGroupCount > 0) {
+                            onSelectBestInDuplicateGroups()
+                        } else if (uiState.manualVisibleVisualGroupCount > 0) {
                             onSelectBestInVisualGroups()
                         } else {
                             onSelectBestInGroups()
                         }
                     },
-                    enabled = uiState.manualVisibleVisualGroupCount > 0 || uiState.manualVisibleNameGroupCount > 0,
+                    enabled = uiState.manualVisibleDuplicateGroupCount > 0 ||
+                        uiState.manualVisibleVisualGroupCount > 0 ||
+                        uiState.manualVisibleNameGroupCount > 0,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text(if (uiState.manualVisibleVisualGroupCount > 0) "Visual Picks" else "Quick Pick")
+                    Text(
+                        when {
+                            uiState.manualVisibleDuplicateGroupCount > 0 -> "Duplicate Picks"
+                            uiState.manualVisibleVisualGroupCount > 0 -> "Visual Picks"
+                            else -> "Quick Pick"
+                        }
+                    )
                 }
             }
 
@@ -410,13 +422,26 @@ private fun ManualSelectionContent(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     OutlinedButton(
+                        onClick = onSelectBestInDuplicateGroups,
+                        enabled = uiState.manualVisibleDuplicateGroupCount > 0,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Duplicate Picks")
+                    }
+
+                    OutlinedButton(
                         onClick = onSelectBestInVisualGroups,
                         enabled = uiState.manualVisibleVisualGroupCount > 0,
                         modifier = Modifier.weight(1f)
                     ) {
                         Text("Visual Picks")
                     }
+                }
 
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     OutlinedButton(
                         onClick = onSelectBatchLeads,
                         enabled = uiState.manualVisibleBatchCount > 0,
@@ -440,7 +465,7 @@ private fun ManualSelectionContent(
                 }
 
                 Text(
-                    text = "${uiState.manualVisualGroupCount} total visual group(s) - ${uiState.manualBatchCount} total batch group(s) - ${uiState.manualNameGroupCount} total name group(s) - ${uiState.manualLargeFileCount} large file(s)",
+                    text = "${uiState.manualDuplicateGroupCount} total duplicate set(s) - ${uiState.manualVisualGroupCount} total visual group(s) - ${uiState.manualBatchCount} total batch group(s) - ${uiState.manualNameGroupCount} total name group(s) - ${uiState.manualLargeFileCount} large file(s)",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -41,6 +41,7 @@ class ResultsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(ResultsUiState())
     val uiState: StateFlow<ResultsUiState> = _uiState.asStateFlow()
+    private var manualDuplicateGroupKeys: Map<Long, String> = emptyMap()
     private var manualVisualGroupKeys: Map<Long, String> = emptyMap()
     private var manualClusterJob: Job? = null
 
@@ -164,6 +165,16 @@ class ResultsViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(selectedIds = bestIds)
     }
 
+    fun selectBestInVisibleDuplicateGroups() {
+        if (!_uiState.value.manualMode) return
+        val bestIds = ManualReviewOrganizer.selectBestInDuplicateGroups(
+            suggestions = _uiState.value.filteredSuggestions,
+            duplicateGroupKeys = manualDuplicateGroupKeys
+        )
+        if (bestIds.isEmpty()) return
+        _uiState.value = _uiState.value.copy(selectedIds = bestIds)
+    }
+
     fun selectBestInVisibleVisualGroups() {
         if (!_uiState.value.manualMode) return
         val bestIds = ManualReviewOrganizer.selectBestInVisualGroups(
@@ -202,6 +213,7 @@ class ResultsViewModel @Inject constructor(
     private fun refreshManualVisualGroups() {
         manualClusterJob?.cancel()
         if (!_uiState.value.manualMode || _uiState.value.allSuggestions.size < 2) {
+            manualDuplicateGroupKeys = emptyMap()
             manualVisualGroupKeys = emptyMap()
             _uiState.value = _uiState.value.copy(
                 isComputingManualVisualGroups = false
@@ -214,7 +226,7 @@ class ResultsViewModel @Inject constructor(
         manualClusterJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isComputingManualVisualGroups = true)
             val embeddingsByImageId = loadManualEmbeddings(snapshotIds)
-            val visualGroupKeys = ManualVisualClusterer.clusterSuggestions(
+            val clusterResult = ManualVisualClusterer.clusterSuggestions(
                 suggestions = suggestionsSnapshot,
                 embeddingsByImageId = embeddingsByImageId
             )
@@ -224,7 +236,8 @@ class ResultsViewModel @Inject constructor(
                 return@launch
             }
 
-            manualVisualGroupKeys = visualGroupKeys
+            manualDuplicateGroupKeys = clusterResult.duplicateGroupKeys
+            manualVisualGroupKeys = clusterResult.visualGroupKeys
             _uiState.value = _uiState.value.copy(isComputingManualVisualGroups = false)
             applyFilter()
         }
@@ -334,6 +347,7 @@ class ResultsViewModel @Inject constructor(
                 query = _uiState.value.manualQuery,
                 filter = _uiState.value.manualFilter,
                 sort = _uiState.value.manualSort,
+                duplicateGroupKeys = manualDuplicateGroupKeys,
                 visualGroupKeys = manualVisualGroupKeys
             )
             val visibleIds = manualReview.visibleSuggestions.mapTo(linkedSetOf()) { it.image.id }
@@ -341,10 +355,12 @@ class ResultsViewModel @Inject constructor(
                 filteredSuggestions = manualReview.visibleSuggestions,
                 manualSections = manualReview.sections,
                 manualGridEntries = manualReview.gridEntries,
+                manualDuplicateGroupCount = manualReview.duplicateGroupCount,
                 manualVisualGroupCount = manualReview.visualGroupCount,
                 manualNameGroupCount = manualReview.nameGroupCount,
                 manualBatchCount = manualReview.batchCount,
                 manualLargeFileCount = manualReview.largeFileCount,
+                manualVisibleDuplicateGroupCount = manualReview.visibleDuplicateGroupCount,
                 manualVisibleVisualGroupCount = manualReview.visibleVisualGroupCount,
                 manualVisibleNameGroupCount = manualReview.visibleNameGroupCount,
                 manualVisibleBatchCount = manualReview.visibleBatchCount,
@@ -370,10 +386,12 @@ class ResultsViewModel @Inject constructor(
                 filteredSuggestions = filtered,
                 manualSections = emptyList(),
                 manualGridEntries = emptyList(),
+                manualDuplicateGroupCount = 0,
                 manualVisualGroupCount = 0,
                 manualNameGroupCount = 0,
                 manualBatchCount = 0,
                 manualLargeFileCount = 0,
+                manualVisibleDuplicateGroupCount = 0,
                 manualVisibleVisualGroupCount = 0,
                 manualVisibleNameGroupCount = 0,
                 manualVisibleBatchCount = 0,

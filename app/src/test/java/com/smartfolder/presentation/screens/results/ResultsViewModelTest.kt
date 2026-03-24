@@ -48,12 +48,14 @@ class ResultsViewModelTest {
     private val firstSuggestion = suggestion(
         id = 1L,
         name = "first.jpg",
-        score = 0.25f
+        score = 0.25f,
+        contentHash = "duplicate-hash"
     )
     private val secondSuggestion = suggestion(
         id = 2L,
         name = "second.jpg",
         score = 0.10f,
+        contentHash = "duplicate-hash",
         sizeBytes = 3_000_000L,
         lastModified = 1_005_000L
     )
@@ -143,6 +145,19 @@ class ResultsViewModelTest {
     }
 
     @Test
+    fun `manual mode can filter duplicate groups`() = runTest(mainDispatcherRule.dispatcher) {
+        val viewModel = createViewModel()
+
+        advanceUntilIdle()
+        viewModel.setManualFilter(ManualReviewFilter.DUPLICATES)
+        viewModel.setManualSort(ManualReviewSort.DUPLICATES)
+
+        val state = viewModel.uiState.value
+        assertEquals(setOf(1L, 2L), state.filteredSuggestions.map { it.image.id }.toSet())
+        assertEquals(1, state.manualVisibleDuplicateGroupCount)
+    }
+
+    @Test
     fun `manual mode can filter visual groups when embeddings are similar`() = runTest(mainDispatcherRule.dispatcher) {
         val viewModel = createViewModel()
 
@@ -153,6 +168,19 @@ class ResultsViewModelTest {
         val state = viewModel.uiState.value
         assertEquals(setOf(3L, 4L), state.filteredSuggestions.map { it.image.id }.toSet())
         assertEquals(1, state.manualVisibleVisualGroupCount)
+    }
+
+    @Test
+    fun `manual mode can pick best image per visible duplicate group`() = runTest(mainDispatcherRule.dispatcher) {
+        val viewModel = createViewModel()
+
+        advanceUntilIdle()
+        viewModel.setManualFilter(ManualReviewFilter.DUPLICATES)
+        viewModel.setManualSort(ManualReviewSort.DUPLICATES)
+        viewModel.selectBestInVisibleDuplicateGroups()
+
+        val state = viewModel.uiState.value
+        assertEquals(setOf(2L), state.selectedIds)
     }
 
     @Test
@@ -242,6 +270,7 @@ class ResultsViewModelTest {
         id: Long,
         name: String,
         score: Float,
+        contentHash: String = "hash-$id",
         sizeBytes: Long = 100L + id,
         lastModified: Long = 1000L + id
     ): SuggestionItem {
@@ -251,7 +280,7 @@ class ResultsViewModelTest {
                 folderId = 10L,
                 uri = mock(Uri::class.java),
                 displayName = name,
-                contentHash = "hash-$id",
+                contentHash = contentHash,
                 sizeBytes = sizeBytes,
                 lastModified = lastModified
             ),
