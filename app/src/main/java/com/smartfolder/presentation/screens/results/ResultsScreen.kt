@@ -45,7 +45,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Surface
@@ -185,7 +184,6 @@ fun ResultsScreen(
                     onSelectBestInVisualGroups = viewModel::selectBestInVisibleVisualGroups,
                     onSelectBestInGroups = viewModel::selectBestInVisibleNameGroups,
                     onSelectBatchLeads = viewModel::selectVisibleBatchLeads,
-                    onQueryChange = viewModel::setManualQuery,
                     onFilterChange = viewModel::setManualFilter,
                     onSortChange = viewModel::setManualSort,
                     onMoveToReference = requestMoveToReference
@@ -274,7 +272,6 @@ private fun ManualSelectionContent(
     onSelectBestInVisualGroups: () -> Unit,
     onSelectBestInGroups: () -> Unit,
     onSelectBatchLeads: () -> Unit,
-    onQueryChange: (String) -> Unit,
     onFilterChange: (ManualReviewFilter) -> Unit,
     onSortChange: (ManualReviewSort) -> Unit,
     onMoveToReference: (Set<Long>) -> Unit
@@ -324,12 +321,12 @@ private fun ManualSelectionContent(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
                 text = "${uiState.visibleSuggestionCount}/${uiState.allSuggestions.size} visible • ${uiState.selectedCount} selected",
-                style = MaterialTheme.typography.titleMedium
+                style = MaterialTheme.typography.titleSmall
             )
             Text(
                 text = "${uiState.manualVisibleVisualGroupCount} visual group(s) • ${uiState.manualVisibleBatchCount} batch group(s) • ${uiState.manualVisibleNameGroupCount} name group(s)",
@@ -343,35 +340,6 @@ private fun ManualSelectionContent(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary
                 )
-            }
-
-            OutlinedTextField(
-                value = uiState.manualQuery,
-                onValueChange = onQueryChange,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("Search filenames") }
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedButton(
-                    onClick = onSelectAll,
-                    enabled = uiState.selectedCount < uiState.filteredSuggestions.size,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Select All")
-                }
-
-                OutlinedButton(
-                    onClick = onClearSelection,
-                    enabled = uiState.selectedCount > 0,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Clear")
-                }
             }
 
             Row(
@@ -410,6 +378,27 @@ private fun ManualSelectionContent(
                 }
             }
 
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onSelectAll,
+                    enabled = uiState.selectedCount < uiState.filteredSuggestions.size
+                ) {
+                    Text("Select All")
+                }
+
+                OutlinedButton(
+                    onClick = onClearSelection,
+                    enabled = uiState.selectedCount > 0
+                ) {
+                    Text("Clear")
+                }
+            }
+
             if (showReviewTools) {
                 val availableFilters = buildList {
                     add(ManualReviewFilter.ALL)
@@ -430,74 +419,19 @@ private fun ManualSelectionContent(
                 }
 
                 ManualChipRow(
-                    title = "Filter",
+                    title = null,
                     options = availableFilters.map { filter ->
                         Triple(filter.label, uiState.manualFilter == filter, { onFilterChange(filter) })
                     }
                 )
 
                 ManualChipRow(
-                    title = "Sort",
+                    title = null,
                     options = availableSorts.map { sort ->
                         Triple(sort.label, uiState.manualSort == sort, { onSortChange(sort) })
                     }
                 )
 
-                if (uiState.manualVisibleDuplicateGroupCount > 0 || uiState.manualVisibleVisualGroupCount > 0) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        if (uiState.manualVisibleDuplicateGroupCount > 0) {
-                            OutlinedButton(
-                                onClick = onSelectBestInDuplicateGroups,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Duplicate Picks")
-                            }
-                        }
-
-                        if (uiState.manualVisibleVisualGroupCount > 0) {
-                            OutlinedButton(
-                                onClick = onSelectBestInVisualGroups,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Visual Picks")
-                            }
-                        }
-                    }
-                }
-
-                if (uiState.manualVisibleBatchCount > 0 || uiState.manualVisibleNameGroupCount > 0) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        if (uiState.manualVisibleBatchCount > 0) {
-                            OutlinedButton(
-                                onClick = onSelectBatchLeads,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Batch Leads")
-                            }
-                        }
-
-                        if (uiState.manualVisibleNameGroupCount > 0) {
-                            OutlinedButton(
-                                onClick = onSelectBestInGroups,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Best In Groups")
-                            }
-                        }
-                    }
-                }
-
-                Text(
-                    text = "${uiState.manualDuplicateGroupCount} total duplicate set(s) - ${uiState.manualVisualGroupCount} total visual group(s) - ${uiState.manualBatchCount} total batch group(s) - ${uiState.manualNameGroupCount} total name group(s) - ${uiState.manualLargeFileCount} large file(s)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
 
@@ -588,15 +522,17 @@ private fun ManualSelectionContent(
 
 @Composable
 private fun ManualChipRow(
-    title: String,
+    title: String?,
     options: List<Triple<String, Boolean, () -> Unit>>
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        title?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
