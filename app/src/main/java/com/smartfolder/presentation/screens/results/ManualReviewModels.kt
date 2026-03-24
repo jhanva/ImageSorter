@@ -335,8 +335,30 @@ internal object ManualReviewOrganizer {
     }
 
     private fun bestCandidateComparator() = compareBy<SuggestionItem> { it.image.sizeBytes }
+        .thenBy { preferredFormatScore(it.image.displayName) }
+        .thenBy { displayNameQualityScore(it.image.displayName) }
         .thenBy { it.image.lastModified }
         .thenBy { it.image.displayName.lowercase(Locale.ROOT) }
+
+    private fun preferredFormatScore(displayName: String): Int {
+        return when (displayName.substringAfterLast('.', "").lowercase(Locale.ROOT)) {
+            "png" -> 3
+            "webp" -> 2
+            "jpg", "jpeg" -> 1
+            else -> 0
+        }
+    }
+
+    private fun displayNameQualityScore(displayName: String): Int {
+        val lowercaseName = displayName.lowercase(Locale.ROOT)
+        var score = 0
+        if (!Regex("\\[[^\\]]*]").containsMatchIn(lowercaseName)) score += 1
+        if (!Regex("\\([^)]*\\)").containsMatchIn(lowercaseName)) score += 1
+        if (!Regex("\\b\\d{3,5}x\\d{3,5}\\b").containsMatchIn(lowercaseName)) score += 1
+        if (!Regex("\\b(copy|edited|edit|crop|sample)\\b").containsMatchIn(lowercaseName)) score += 2
+        if (normalizeNameGroupKey(displayName).split(' ').count { it.isNotBlank() } >= 2) score += 1
+        return score
+    }
 
     internal fun normalizeNameGroupKey(displayName: String): String {
         val base = displayName.substringBeforeLast('.')

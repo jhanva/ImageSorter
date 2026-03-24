@@ -49,6 +49,25 @@ class ManualVisualClustererTest {
         assertTrue(clusterResult.duplicateGroupKeys[3L] == null)
     }
 
+    @Test
+    fun `does not merge a weak visual bridge into the same group`() {
+        val suggestions = listOf(
+            suggestion(1L, "raiden-key-art.png", sizeBytes = 4000L),
+            suggestion(2L, "raiden-promo.png", sizeBytes = 3900L),
+            suggestion(3L, "different-scene.png", sizeBytes = 3800L)
+        )
+        val embeddings = listOf(
+            embedding(1L, floatArrayOf(1f, 0f, 0f)),
+            embedding(2L, floatArrayOf(0.92f, 0.392f, 0f)),
+            embedding(3L, floatArrayOf(0.84f, 0.542f, 0f))
+        ).associateBy { it.imageId }
+
+        val clusterResult = ManualVisualClusterer.clusterSuggestions(suggestions, embeddings)
+
+        assertEquals(clusterResult.visualGroupKeys[1L], clusterResult.visualGroupKeys[2L])
+        assertTrue(clusterResult.visualGroupKeys[3L] == null)
+    }
+
     private fun suggestion(
         id: Long,
         name: String,
