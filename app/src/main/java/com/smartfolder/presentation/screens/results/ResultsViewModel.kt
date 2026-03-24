@@ -4,9 +4,11 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartfolder.BuildConfig
+import com.smartfolder.domain.model.Embedding
 import com.smartfolder.domain.model.FolderRole
 import com.smartfolder.domain.model.SuggestionItem
 import com.smartfolder.domain.model.StoredSuggestion
+import com.smartfolder.domain.repository.EmbeddingRepository
 import com.smartfolder.domain.repository.FolderRepository
 import com.smartfolder.domain.repository.SettingsRepository
 import com.smartfolder.domain.repository.SuggestionRepository
@@ -16,6 +18,7 @@ import com.smartfolder.domain.usecase.LoadSuggestionsUseCase
 import com.smartfolder.domain.usecase.MoveImagesUseCase
 import com.smartfolder.domain.usecase.RejectSuggestionUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,6 +33,7 @@ class ResultsViewModel @Inject constructor(
     private val acceptSuggestionUseCase: AcceptSuggestionUseCase,
     private val rejectSuggestionUseCase: RejectSuggestionUseCase,
     private val folderRepository: FolderRepository,
+    private val embeddingRepository: EmbeddingRepository,
     private val settingsRepository: SettingsRepository,
     private val loadSuggestionsUseCase: LoadSuggestionsUseCase,
     private val suggestionRepository: SuggestionRepository
@@ -37,6 +41,8 @@ class ResultsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(ResultsUiState())
     val uiState: StateFlow<ResultsUiState> = _uiState.asStateFlow()
+    private var manualVisualGroupKeys: Map<Long, String> = emptyMap()
+    private var manualClusterJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -53,6 +59,7 @@ class ResultsViewModel @Inject constructor(
                     currentReviewIndex = if (manualMode) 0 else _uiState.value.currentReviewIndex,
                     selectedIds = if (manualMode) _uiState.value.selectedIds else emptySet()
                 )
+                refreshManualVisualGroups()
                 applyFilter()
             }
         }
@@ -60,6 +67,7 @@ class ResultsViewModel @Inject constructor(
             val stored = loadSuggestionsUseCase()
             if (stored.isNotEmpty()) {
                 _uiState.value = _uiState.value.copy(allSuggestions = stored)
+                refreshManualVisualGroups()
                 applyFilter()
             }
         }
@@ -156,6 +164,16 @@ class ResultsViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(selectedIds = bestIds)
     }
 
+    fun selectBestInVisibleVisualGroups() {
+        if (!_uiState.value.manualMode) return
+        val bestIds = ManualReviewOrganizer.selectBestInVisualGroups(
+            suggestions = _uiState.value.filteredSuggestions,
+            visualGroupKeys = manualVisualGroupKeys
+        )
+        if (bestIds.isEmpty()) return
+        _uiState.value = _uiState.value.copy(selectedIds = bestIds)
+    }
+
     fun selectVisibleBatchLeads() {
         if (!_uiState.value.manualMode) return
         val leadIds = ManualReviewOrganizer.selectBatchLeads(_uiState.value.filteredSuggestions)
@@ -179,6 +197,44 @@ class ResultsViewModel @Inject constructor(
         if (!_uiState.value.manualMode) return
         _uiState.value = _uiState.value.copy(manualSort = sort)
         applyFilter()
+    }
+
+    private fun refreshManualVisualGroups() {
+        manualClusterJob?.cancel()
+        if (!_uiState.value.manualMode || _uiState.value.allSuggestions.size < 2) {
+            manualVisualGroupKeys = emptyMap()
+            _uiState.value = _uiState.value.copy(
+                isComputingManualVisualGroups = false
+            )
+            return
+        }
+
+        val suggestionsSnapshot = _uiState.value.allSuggestions
+        val snapshotIds = suggestionsSnapshot.map { it.image.id }
+        manualClusterJob = viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isComputingManualVisualGroups = true)
+            val embeddingsByImageId = loadManualEmbeddings(snapshotIds)
+            val visualGroupKeys = ManualVisualClusterer.clusterSuggestions(
+                suggestions = suggestionsSnapshot,
+                embeddingsByImageId = embeddingsByImageId
+            )
+
+            val currentIds = _uiState.value.allSuggestions.map { it.image.id }
+            if (currentIds != snapshotIds || !_uiState.value.manualMode) {
+                return@launch
+            }
+
+            manualVisualGroupKeys = visualGroupKeys
+            _uiState.value = _uiState.value.copy(isComputingManualVisualGroups = false)
+            applyFilter()
+        }
+    }
+
+    private suspend fun loadManualEmbeddings(imageIds: List<Long>): Map<Long, Embedding> {
+        val modelChoice = settingsRepository.modelChoice.first()
+        return embeddingRepository.getByImageIds(imageIds)
+            .filter { it.modelName == modelChoice.modelFileName }
+            .associateBy { it.imageId }
     }
 
     private fun advanceReview() {
@@ -277,16 +333,19 @@ class ResultsViewModel @Inject constructor(
                 suggestions = _uiState.value.allSuggestions,
                 query = _uiState.value.manualQuery,
                 filter = _uiState.value.manualFilter,
-                sort = _uiState.value.manualSort
+                sort = _uiState.value.manualSort,
+                visualGroupKeys = manualVisualGroupKeys
             )
             val visibleIds = manualReview.visibleSuggestions.mapTo(linkedSetOf()) { it.image.id }
             _uiState.value = _uiState.value.copy(
                 filteredSuggestions = manualReview.visibleSuggestions,
                 manualSections = manualReview.sections,
                 manualGridEntries = manualReview.gridEntries,
+                manualVisualGroupCount = manualReview.visualGroupCount,
                 manualNameGroupCount = manualReview.nameGroupCount,
                 manualBatchCount = manualReview.batchCount,
                 manualLargeFileCount = manualReview.largeFileCount,
+                manualVisibleVisualGroupCount = manualReview.visibleVisualGroupCount,
                 manualVisibleNameGroupCount = manualReview.visibleNameGroupCount,
                 manualVisibleBatchCount = manualReview.visibleBatchCount,
                 selectedIds = _uiState.value.selectedIds.filterTo(linkedSetOf()) { it in visibleIds },
@@ -311,9 +370,11 @@ class ResultsViewModel @Inject constructor(
                 filteredSuggestions = filtered,
                 manualSections = emptyList(),
                 manualGridEntries = emptyList(),
+                manualVisualGroupCount = 0,
                 manualNameGroupCount = 0,
                 manualBatchCount = 0,
                 manualLargeFileCount = 0,
+                manualVisibleVisualGroupCount = 0,
                 manualVisibleNameGroupCount = 0,
                 manualVisibleBatchCount = 0,
                 isDebugTopFallback = false

@@ -57,6 +57,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -173,6 +174,7 @@ fun ResultsScreen(
                     onToggleSectionSelection = viewModel::toggleSectionSelection,
                     onSelectAll = viewModel::selectAllFiltered,
                     onClearSelection = viewModel::clearSelection,
+                    onSelectBestInVisualGroups = viewModel::selectBestInVisibleVisualGroups,
                     onSelectBestInGroups = viewModel::selectBestInVisibleNameGroups,
                     onSelectBatchLeads = viewModel::selectVisibleBatchLeads,
                     onQueryChange = viewModel::setManualQuery,
@@ -260,6 +262,7 @@ private fun ManualSelectionContent(
     onToggleSectionSelection: (Set<Long>) -> Unit,
     onSelectAll: () -> Unit,
     onClearSelection: () -> Unit,
+    onSelectBestInVisualGroups: () -> Unit,
     onSelectBestInGroups: () -> Unit,
     onSelectBatchLeads: () -> Unit,
     onQueryChange: (String) -> Unit,
@@ -268,6 +271,7 @@ private fun ManualSelectionContent(
     onMoveSelected: () -> Unit
 ) {
     var showMoveConfirmation by remember { mutableStateOf(false) }
+    var showReviewTools by rememberSaveable { mutableStateOf(false) }
 
     if (showMoveConfirmation) {
         AlertDialog(
@@ -311,22 +315,25 @@ private fun ManualSelectionContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(
-                text = "${uiState.allSuggestions.size} images loaded from folder B",
+                text = "${uiState.visibleSuggestionCount}/${uiState.allSuggestions.size} visible • ${uiState.selectedCount} selected",
                 style = MaterialTheme.typography.titleMedium
             )
             Text(
-                text = "Offline assisted review with local grouping. ${uiState.selectedCount} image(s) selected across ${uiState.visibleSuggestionCount} visible result(s).",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = "${uiState.manualBatchCount} batch group(s) - ${uiState.manualNameGroupCount} name group(s) - ${uiState.manualLargeFileCount} large file(s)",
+                text = "${uiState.manualVisibleVisualGroupCount} visual group(s) • ${uiState.manualVisibleBatchCount} batch group(s) • ${uiState.manualVisibleNameGroupCount} name group(s)",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            if (uiState.isComputingManualVisualGroups) {
+                Text(
+                    text = "Analyzing visual similarity offline...",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
 
             OutlinedTextField(
                 value = uiState.manualQuery,
@@ -334,20 +341,6 @@ private fun ManualSelectionContent(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 label = { Text("Search filenames") }
-            )
-
-            ManualChipRow(
-                title = "Filter",
-                options = ManualReviewFilter.entries.map { filter ->
-                    Triple(filter.label, uiState.manualFilter == filter, { onFilterChange(filter) })
-                }
-            )
-
-            ManualChipRow(
-                title = "Sort",
-                options = ManualReviewSort.entries.map { sort ->
-                    Triple(sort.label, uiState.manualSort == sort, { onSortChange(sort) })
-                }
             )
 
             Row(
@@ -376,20 +369,81 @@ private fun ManualSelectionContent(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedButton(
-                    onClick = onSelectBestInGroups,
-                    enabled = uiState.manualVisibleNameGroupCount > 0,
+                    onClick = { showReviewTools = !showReviewTools },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Pick Best In Groups")
+                    Text(if (showReviewTools) "Hide Tools" else "Show Tools")
                 }
 
                 OutlinedButton(
-                    onClick = onSelectBatchLeads,
-                    enabled = uiState.manualVisibleBatchCount > 0,
+                    onClick = {
+                        if (uiState.manualVisibleVisualGroupCount > 0) {
+                            onSelectBestInVisualGroups()
+                        } else {
+                            onSelectBestInGroups()
+                        }
+                    },
+                    enabled = uiState.manualVisibleVisualGroupCount > 0 || uiState.manualVisibleNameGroupCount > 0,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Pick Batch Leads")
+                    Text(if (uiState.manualVisibleVisualGroupCount > 0) "Visual Picks" else "Quick Pick")
                 }
+            }
+
+            if (showReviewTools) {
+                ManualChipRow(
+                    title = "Filter",
+                    options = ManualReviewFilter.entries.map { filter ->
+                        Triple(filter.label, uiState.manualFilter == filter, { onFilterChange(filter) })
+                    }
+                )
+
+                ManualChipRow(
+                    title = "Sort",
+                    options = ManualReviewSort.entries.map { sort ->
+                        Triple(sort.label, uiState.manualSort == sort, { onSortChange(sort) })
+                    }
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onSelectBestInVisualGroups,
+                        enabled = uiState.manualVisibleVisualGroupCount > 0,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Visual Picks")
+                    }
+
+                    OutlinedButton(
+                        onClick = onSelectBatchLeads,
+                        enabled = uiState.manualVisibleBatchCount > 0,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Batch Leads")
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onSelectBestInGroups,
+                        enabled = uiState.manualVisibleNameGroupCount > 0,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Best In Groups")
+                    }
+                }
+
+                Text(
+                    text = "${uiState.manualVisualGroupCount} total visual group(s) - ${uiState.manualBatchCount} total batch group(s) - ${uiState.manualNameGroupCount} total name group(s) - ${uiState.manualLargeFileCount} large file(s)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
 

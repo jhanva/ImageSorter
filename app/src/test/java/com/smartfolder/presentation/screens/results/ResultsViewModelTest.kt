@@ -2,9 +2,11 @@ package com.smartfolder.presentation.screens.results
 
 import android.net.Uri
 import com.smartfolder.domain.model.ExecutionProfile
+import com.smartfolder.domain.model.Embedding
 import com.smartfolder.domain.model.ImageInfo
 import com.smartfolder.domain.model.ModelChoice
 import com.smartfolder.domain.model.SuggestionItem
+import com.smartfolder.domain.repository.EmbeddingRepository
 import com.smartfolder.domain.repository.FolderRepository
 import com.smartfolder.domain.repository.SettingsRepository
 import com.smartfolder.domain.repository.SuggestionRepository
@@ -38,6 +40,7 @@ class ResultsViewModelTest {
     private lateinit var acceptSuggestionUseCase: AcceptSuggestionUseCase
     private lateinit var rejectSuggestionUseCase: RejectSuggestionUseCase
     private lateinit var folderRepository: FolderRepository
+    private lateinit var embeddingRepository: EmbeddingRepository
     private lateinit var loadSuggestionsUseCase: LoadSuggestionsUseCase
     private lateinit var suggestionRepository: SuggestionRepository
     private lateinit var settingsRepository: FakeSettingsRepository
@@ -77,6 +80,7 @@ class ResultsViewModelTest {
         acceptSuggestionUseCase = mock(AcceptSuggestionUseCase::class.java)
         rejectSuggestionUseCase = mock(RejectSuggestionUseCase::class.java)
         folderRepository = mock(FolderRepository::class.java)
+        embeddingRepository = mock(EmbeddingRepository::class.java)
         loadSuggestionsUseCase = mock(LoadSuggestionsUseCase::class.java)
         suggestionRepository = mock(SuggestionRepository::class.java)
         settingsRepository = FakeSettingsRepository(
@@ -139,6 +143,32 @@ class ResultsViewModelTest {
     }
 
     @Test
+    fun `manual mode can filter visual groups when embeddings are similar`() = runTest(mainDispatcherRule.dispatcher) {
+        val viewModel = createViewModel()
+
+        advanceUntilIdle()
+        viewModel.setManualFilter(ManualReviewFilter.VISUAL_GROUPS)
+        viewModel.setManualSort(ManualReviewSort.VISUAL_GROUPS)
+
+        val state = viewModel.uiState.value
+        assertEquals(setOf(3L, 4L), state.filteredSuggestions.map { it.image.id }.toSet())
+        assertEquals(1, state.manualVisibleVisualGroupCount)
+    }
+
+    @Test
+    fun `manual mode can pick best image per visible visual group`() = runTest(mainDispatcherRule.dispatcher) {
+        val viewModel = createViewModel()
+
+        advanceUntilIdle()
+        viewModel.setManualFilter(ManualReviewFilter.VISUAL_GROUPS)
+        viewModel.setManualSort(ManualReviewSort.VISUAL_GROUPS)
+        viewModel.selectBestInVisibleVisualGroups()
+
+        val state = viewModel.uiState.value
+        assertEquals(setOf(3L), state.selectedIds)
+    }
+
+    @Test
     fun `manual mode trims section selection to current filter`() = runTest(mainDispatcherRule.dispatcher) {
         val viewModel = createViewModel()
 
@@ -179,15 +209,32 @@ class ResultsViewModelTest {
     private suspend fun createViewModel(): ResultsViewModel {
         `when`(loadSuggestionsUseCase.invoke()).thenReturn(allSuggestions)
         `when`(getSuggestionsUseCase.invoke(emptyList(), 0.80f)).thenReturn(emptyList())
+        `when`(embeddingRepository.getByImageIds(listOf(1L, 2L, 3L, 4L))).thenReturn(
+            listOf(
+                embedding(1L, floatArrayOf(1f, 0f, 0f)),
+                embedding(2L, floatArrayOf(0f, 1f, 0f)),
+                embedding(3L, floatArrayOf(0f, 0f, 1f)),
+                embedding(4L, floatArrayOf(0f, 0.1f, 0.995f))
+            )
+        )
         return ResultsViewModel(
             getSuggestionsUseCase = getSuggestionsUseCase,
             moveImagesUseCase = moveImagesUseCase,
             acceptSuggestionUseCase = acceptSuggestionUseCase,
             rejectSuggestionUseCase = rejectSuggestionUseCase,
             folderRepository = folderRepository,
+            embeddingRepository = embeddingRepository,
             settingsRepository = settingsRepository,
             loadSuggestionsUseCase = loadSuggestionsUseCase,
             suggestionRepository = suggestionRepository
+        )
+    }
+
+    private fun embedding(imageId: Long, vector: FloatArray): Embedding {
+        return Embedding(
+            imageId = imageId,
+            vector = vector,
+            modelName = ModelChoice.FAST.modelFileName
         )
     }
 

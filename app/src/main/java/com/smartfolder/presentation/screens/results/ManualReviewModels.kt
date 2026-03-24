@@ -7,11 +7,13 @@ import kotlin.math.min
 
 enum class ManualReviewFilter(val label: String) {
     ALL("All"),
+    VISUAL_GROUPS("Visual Groups"),
     NAME_GROUPS("Name Groups"),
     LARGE_FILES("Large Files")
 }
 
 enum class ManualReviewSort(val label: String) {
+    VISUAL_GROUPS("Visual Groups"),
     BATCHES("Batches"),
     NEWEST("Newest"),
     NAME("Name"),
@@ -38,9 +40,11 @@ internal object ManualReviewOrganizer {
         val visibleSuggestions: List<SuggestionItem>,
         val sections: List<ManualReviewSection>,
         val gridEntries: List<ManualReviewGridEntry>,
+        val visualGroupCount: Int,
         val nameGroupCount: Int,
         val batchCount: Int,
         val largeFileCount: Int,
+        val visibleVisualGroupCount: Int,
         val visibleNameGroupCount: Int,
         val visibleBatchCount: Int
     )
@@ -49,8 +53,10 @@ internal object ManualReviewOrganizer {
         suggestions: List<SuggestionItem>,
         query: String,
         filter: ManualReviewFilter,
-        sort: ManualReviewSort
+        sort: ManualReviewSort,
+        visualGroupKeys: Map<Long, String>
     ): Result {
+        val visualGroups = buildVisualGroups(suggestions, visualGroupKeys)
         val nameGroups = buildNameGroups(suggestions)
         val batchGroups = buildBatchGroups(suggestions)
         val largeFileThreshold = resolveLargeFileThreshold(suggestions)
@@ -61,6 +67,9 @@ internal object ManualReviewOrganizer {
 
         val filtered = when (filter) {
             ManualReviewFilter.ALL -> queryFiltered
+            ManualReviewFilter.VISUAL_GROUPS -> queryFiltered.filter { suggestion ->
+                (visualGroups[visualGroupKeys[suggestion.image.id]]?.size ?: 0) > 1
+            }
             ManualReviewFilter.NAME_GROUPS -> queryFiltered.filter { suggestion ->
                 val key = normalizeNameGroupKey(suggestion.image.displayName)
                 key.isNotBlank() && (nameGroups[key]?.size ?: 0) > 1
@@ -75,18 +84,22 @@ internal object ManualReviewOrganizer {
                 visibleSuggestions = emptyList(),
                 sections = emptyList(),
                 gridEntries = emptyList(),
+                visualGroupCount = visualGroups.values.count { it.size > 1 },
                 nameGroupCount = nameGroups.values.count { it.size > 1 },
                 batchCount = batchGroups.count { it.size > 1 },
                 largeFileCount = suggestions.count { it.image.sizeBytes >= largeFileThreshold },
+                visibleVisualGroupCount = 0,
                 visibleNameGroupCount = 0,
                 visibleBatchCount = 0
             )
         }
 
+        val filteredVisualGroups = buildVisualGroups(filtered, visualGroupKeys)
         val filteredNameGroups = buildNameGroups(filtered)
         val filteredBatchGroups = buildBatchGroups(filtered)
 
         val sections = when (sort) {
+            ManualReviewSort.VISUAL_GROUPS -> buildVisualSections(filtered, visualGroupKeys)
             ManualReviewSort.BATCHES -> buildBatchSections(filtered)
             ManualReviewSort.NEWEST -> listOf(
                 singleSection("newest", "Newest first", filtered.sortedByDescending { it.image.lastModified })
@@ -110,9 +123,11 @@ internal object ManualReviewOrganizer {
             visibleSuggestions = sections.flatMap { it.suggestions },
             sections = sections,
             gridEntries = gridEntries,
+            visualGroupCount = visualGroups.values.count { it.size > 1 },
             nameGroupCount = nameGroups.values.count { it.size > 1 },
             batchCount = batchGroups.count { it.size > 1 },
             largeFileCount = suggestions.count { it.image.sizeBytes >= largeFileThreshold },
+            visibleVisualGroupCount = filteredVisualGroups.values.count { it.size > 1 },
             visibleNameGroupCount = filteredNameGroups.values.count { it.size > 1 },
             visibleBatchCount = filteredBatchGroups.count { it.size > 1 }
         )
@@ -120,6 +135,17 @@ internal object ManualReviewOrganizer {
 
     fun selectBestInNameGroups(suggestions: List<SuggestionItem>): Set<Long> {
         return buildNameGroups(suggestions)
+            .values
+            .filter { it.size > 1 }
+            .mapNotNull { chooseBestCandidate(it)?.image?.id }
+            .toSet()
+    }
+
+    fun selectBestInVisualGroups(
+        suggestions: List<SuggestionItem>,
+        visualGroupKeys: Map<Long, String>
+    ): Set<Long> {
+        return buildVisualGroups(suggestions, visualGroupKeys)
             .values
             .filter { it.size > 1 }
             .mapNotNull { chooseBestCandidate(it)?.image?.id }
@@ -140,6 +166,41 @@ internal object ManualReviewOrganizer {
             subtitle = "${suggestions.size} image(s)",
             suggestions = suggestions
         )
+    }
+
+    private fun buildVisualSections(
+        suggestions: List<SuggestionItem>,
+        visualGroupKeys: Map<Long, String>
+    ): List<ManualReviewSection> {
+        val visualGroups = buildVisualGroups(suggestions, visualGroupKeys)
+        val sections = visualGroups.entries
+            .sortedByDescending { it.value.size }
+            .mapIndexed { index, entry ->
+                ManualReviewSection(
+                    key = entry.key,
+                    title = "Visual Group ${index + 1}",
+                    subtitle = "${entry.value.size} image(s)",
+                    suggestions = entry.value.sortedWith(bestCandidateComparator().reversed())
+                )
+            }
+            .toMutableList()
+
+        val groupedIds = visualGroups.values.flatten().mapTo(hashSetOf()) { it.image.id }
+        val singles = suggestions
+            .filter { it.image.id !in groupedIds }
+            .sortedByDescending { it.image.lastModified }
+        if (singles.isNotEmpty()) {
+            sections.add(
+                ManualReviewSection(
+                    key = "visual-singles",
+                    title = "Ungrouped images",
+                    subtitle = "${singles.size} image(s)",
+                    suggestions = singles
+                )
+            )
+        }
+
+        return sections
     }
 
     private fun buildBatchSections(suggestions: List<SuggestionItem>): List<ManualReviewSection> {
@@ -171,6 +232,20 @@ internal object ManualReviewOrganizer {
             )
         }
         return sections
+    }
+
+    private fun buildVisualGroups(
+        suggestions: List<SuggestionItem>,
+        visualGroupKeys: Map<Long, String>
+    ): Map<String, List<SuggestionItem>> {
+        return suggestions
+            .mapNotNull { suggestion ->
+                visualGroupKeys[suggestion.image.id]?.let { key -> key to suggestion }
+            }
+            .groupBy(
+                keySelector = { it.first },
+                valueTransform = { it.second }
+            )
     }
 
     private fun buildBatchGroups(suggestions: List<SuggestionItem>): List<List<SuggestionItem>> {
@@ -208,12 +283,12 @@ internal object ManualReviewOrganizer {
     }
 
     private fun chooseBestCandidate(suggestions: List<SuggestionItem>): SuggestionItem? {
-        return suggestions.maxWithOrNull(
-            compareBy<SuggestionItem> { it.image.sizeBytes }
-                .thenBy { it.image.lastModified }
-                .thenBy { it.image.displayName.lowercase(Locale.ROOT) }
-        )
+        return suggestions.maxWithOrNull(bestCandidateComparator())
     }
+
+    private fun bestCandidateComparator() = compareBy<SuggestionItem> { it.image.sizeBytes }
+        .thenBy { it.image.lastModified }
+        .thenBy { it.image.displayName.lowercase(Locale.ROOT) }
 
     internal fun normalizeNameGroupKey(displayName: String): String {
         val base = displayName.substringBeforeLast('.')
