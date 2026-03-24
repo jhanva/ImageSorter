@@ -113,12 +113,15 @@ class ResultsViewModelTest {
 
         advanceUntilIdle()
         viewModel.toggleSelection(1L)
+        advanceUntilIdle()
         assertEquals(setOf(1L), viewModel.uiState.value.selectedIds)
 
         viewModel.selectAllFiltered()
+        advanceUntilIdle()
         assertEquals(setOf(1L, 2L, 3L, 4L), viewModel.uiState.value.selectedIds)
 
         viewModel.clearSelection()
+        advanceUntilIdle()
         assertTrue(viewModel.uiState.value.selectedIds.isEmpty())
     }
 
@@ -140,6 +143,7 @@ class ResultsViewModelTest {
 
         advanceUntilIdle()
         viewModel.setManualFilter(ManualReviewFilter.NAME_GROUPS)
+        advanceUntilIdle()
 
         val state = viewModel.uiState.value
         assertEquals(listOf(3L, 4L), state.filteredSuggestions.map { it.image.id })
@@ -153,6 +157,7 @@ class ResultsViewModelTest {
         advanceUntilIdle()
         viewModel.setManualFilter(ManualReviewFilter.DUPLICATES)
         viewModel.setManualSort(ManualReviewSort.DUPLICATES)
+        advanceUntilIdle()
 
         val state = viewModel.uiState.value
         assertEquals(setOf(1L, 2L), state.filteredSuggestions.map { it.image.id }.toSet())
@@ -166,6 +171,7 @@ class ResultsViewModelTest {
         advanceUntilIdle()
         viewModel.setManualFilter(ManualReviewFilter.VISUAL_GROUPS)
         viewModel.setManualSort(ManualReviewSort.VISUAL_GROUPS)
+        advanceUntilIdle()
 
         val state = viewModel.uiState.value
         assertEquals(setOf(3L, 4L), state.filteredSuggestions.map { it.image.id }.toSet())
@@ -179,7 +185,9 @@ class ResultsViewModelTest {
         advanceUntilIdle()
         viewModel.setManualFilter(ManualReviewFilter.DUPLICATES)
         viewModel.setManualSort(ManualReviewSort.DUPLICATES)
+        advanceUntilIdle()
         viewModel.selectBestInVisibleDuplicateGroups()
+        advanceUntilIdle()
 
         val state = viewModel.uiState.value
         assertEquals(setOf(2L), state.selectedIds)
@@ -192,7 +200,9 @@ class ResultsViewModelTest {
         advanceUntilIdle()
         viewModel.setManualFilter(ManualReviewFilter.VISUAL_GROUPS)
         viewModel.setManualSort(ManualReviewSort.VISUAL_GROUPS)
+        advanceUntilIdle()
         viewModel.selectBestInVisibleVisualGroups()
+        advanceUntilIdle()
 
         val state = viewModel.uiState.value
         assertEquals(setOf(3L), state.selectedIds)
@@ -204,7 +214,9 @@ class ResultsViewModelTest {
 
         advanceUntilIdle()
         viewModel.toggleSelection(1L)
+        advanceUntilIdle()
         viewModel.setManualQuery("raiden")
+        advanceUntilIdle()
 
         val state = viewModel.uiState.value
         assertEquals(setOf(3L, 4L), state.filteredSuggestions.map { it.image.id }.toSet())
@@ -217,7 +229,9 @@ class ResultsViewModelTest {
 
         advanceUntilIdle()
         viewModel.setManualFilter(ManualReviewFilter.NAME_GROUPS)
+        advanceUntilIdle()
         viewModel.selectBestInVisibleNameGroups()
+        advanceUntilIdle()
 
         val state = viewModel.uiState.value
         assertEquals(setOf(3L), state.selectedIds)
@@ -230,6 +244,7 @@ class ResultsViewModelTest {
 
         advanceUntilIdle()
         viewModel.selectVisibleBatchLeads()
+        advanceUntilIdle()
 
         val state = viewModel.uiState.value
         assertEquals(setOf(3L), state.selectedIds)
