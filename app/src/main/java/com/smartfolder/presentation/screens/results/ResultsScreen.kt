@@ -82,22 +82,27 @@ fun ResultsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    var pendingReferenceMoveIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+
     val writeRequestLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            viewModel.moveAccepted()
+            viewModel.moveImagesToReference(pendingReferenceMoveIds)
         } else {
             viewModel.setError("Write permission denied. Could not move selected images.")
         }
+        pendingReferenceMoveIds = emptySet()
     }
-    val moveSelectedImages = {
+
+    val requestMoveToReference: (Set<Long>) -> Unit = { imageIds ->
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val uris = viewModel.getAcceptedImageUris()
+            val uris = viewModel.getImageUris(imageIds)
             if (uris.isEmpty()) {
-                viewModel.moveAccepted()
+                viewModel.moveImagesToReference(imageIds)
             } else {
                 try {
+                    pendingReferenceMoveIds = imageIds
                     val writeRequest = MediaStore.createWriteRequest(
                         context.contentResolver,
                         uris
@@ -106,15 +111,17 @@ fun ResultsScreen(
                         IntentSenderRequest.Builder(writeRequest.intentSender).build()
                     )
                 } catch (e: Exception) {
+                    pendingReferenceMoveIds = emptySet()
                     viewModel.setError(
                         e.message ?: "Could not request write permission for selected images."
                     )
                 }
             }
         } else {
-            viewModel.moveAccepted()
+            viewModel.moveImagesToReference(imageIds)
         }
     }
+    val moveSelectedImages = { requestMoveToReference(uiState.moveCandidateIds) }
 
     Scaffold(
         topBar = {
@@ -181,7 +188,7 @@ fun ResultsScreen(
                     onQueryChange = viewModel::setManualQuery,
                     onFilterChange = viewModel::setManualFilter,
                     onSortChange = viewModel::setManualSort,
-                    onMoveSelected = moveSelectedImages
+                    onMoveToReference = requestMoveToReference
                 )
                 uiState.reviewComplete -> ReviewSummary(
                     acceptedCount = uiState.acceptedCount,
@@ -270,32 +277,33 @@ private fun ManualSelectionContent(
     onQueryChange: (String) -> Unit,
     onFilterChange: (ManualReviewFilter) -> Unit,
     onSortChange: (ManualReviewSort) -> Unit,
-    onMoveSelected: () -> Unit
+    onMoveToReference: (Set<Long>) -> Unit
 ) {
-    var showMoveConfirmation by remember { mutableStateOf(false) }
+    var moveConfirmationIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var showReviewTools by rememberSaveable { mutableStateOf(false) }
 
-    if (showMoveConfirmation) {
+    if (moveConfirmationIds.isNotEmpty()) {
         AlertDialog(
-            onDismissRequest = { showMoveConfirmation = false },
+            onDismissRequest = { moveConfirmationIds = emptySet() },
             title = { Text("Move Images") },
             text = {
                 Text(
-                    "Move ${uiState.moveCandidateCount} selected image(s) to the reference folder? Files will be removed from the unsorted folder."
+                    "Move ${moveConfirmationIds.size} image(s) to A? Files will be removed from folder B."
                 )
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        showMoveConfirmation = false
-                        onMoveSelected()
+                        val imageIds = moveConfirmationIds
+                        moveConfirmationIds = emptySet()
+                        onMoveToReference(imageIds)
                     }
                 ) {
                     Text("Move")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showMoveConfirmation = false }) {
+                TextButton(onClick = { moveConfirmationIds = emptySet() }) {
                     Text("Cancel")
                 }
             }
@@ -533,7 +541,11 @@ private fun ManualSelectionContent(
                         is ManualReviewGridEntry.Header -> ManualSectionHeader(
                             section = entry.section,
                             selectedIds = uiState.selectedIds,
-                            onToggleSectionSelection = onToggleSectionSelection
+                            onToggleSectionSelection = onToggleSectionSelection,
+                            onMoveSectionToReference = {
+                                moveConfirmationIds = entry.section.suggestions
+                                    .mapTo(linkedSetOf()) { it.image.id }
+                            }
                         )
                         is ManualReviewGridEntry.ImageItem -> ManualSuggestionGridItem(
                             suggestion = entry.suggestion,
@@ -545,24 +557,31 @@ private fun ManualSelectionContent(
             }
         }
 
-        Button(
-            onClick = { showMoveConfirmation = true },
-            enabled = uiState.moveCandidateCount > 0 && !uiState.isMoving,
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (uiState.isMoving) {
-                CircularProgressIndicator(
-                    modifier = Modifier
-                        .size(20.dp)
-                        .padding(end = 8.dp),
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    strokeWidth = 2.dp
-                )
-                Spacer(modifier = Modifier.width(8.dp))
+            Button(
+                onClick = {
+                    moveConfirmationIds = uiState.moveCandidateIds
+                },
+                enabled = uiState.moveCandidateCount > 0 && !uiState.isMoving,
+                modifier = Modifier.weight(1f)
+            ) {
+                if (uiState.isMoving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .padding(end = 8.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text("Move to A")
             }
-            Text("Move ${uiState.moveCandidateCount} Selected Image(s)")
         }
     }
 }
@@ -599,7 +618,8 @@ private fun ManualChipRow(
 private fun ManualSectionHeader(
     section: ManualReviewSection,
     selectedIds: Set<Long>,
-    onToggleSectionSelection: (Set<Long>) -> Unit
+    onToggleSectionSelection: (Set<Long>) -> Unit,
+    onMoveSectionToReference: () -> Unit
 ) {
     val sectionIds = section.suggestions.mapTo(linkedSetOf()) { it.image.id }
     val allSelected = sectionIds.isNotEmpty() && sectionIds.all { it in selectedIds }
@@ -607,15 +627,14 @@ private fun ManualSectionHeader(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Column(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 Text(
@@ -628,8 +647,23 @@ private fun ManualSectionHeader(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            OutlinedButton(onClick = { onToggleSectionSelection(sectionIds) }) {
-                Text(if (allSelected) "Clear Section" else "Select Section")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { onToggleSectionSelection(sectionIds) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(if (allSelected) "Clear Batch" else "Select Batch")
+                }
+
+                Button(
+                    onClick = onMoveSectionToReference,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Move to A")
+                }
             }
         }
     }

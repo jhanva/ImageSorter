@@ -263,27 +263,46 @@ class ResultsViewModel @Inject constructor(
     }
 
     fun moveAccepted() {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isMoving = true, error = null)
+        moveImagesToReference(_uiState.value.moveCandidateIds)
+    }
 
+    fun moveImagesToReference(imageIds: Set<Long>) {
+        viewModelScope.launch {
             val refFolder = folderRepository.getByRole(FolderRole.REFERENCE).maxByOrNull { it.id }
             if (refFolder == null) {
+                _uiState.value = _uiState.value.copy(error = "Reference folder not found")
+                return@launch
+            }
+            moveImagesToDestination(
+                imageIds = imageIds,
+                destinationFolderUri = refFolder.uri,
+                destinationLabel = "A"
+            )
+        }
+    }
+
+    fun moveImagesToDestination(
+        imageIds: Set<Long>,
+        destinationFolderUri: Uri,
+        destinationLabel: String
+    ) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isMoving = true, error = null)
+            val acceptedImages = _uiState.value.allSuggestions
+                .filter { it.image.id in imageIds }
+                .map { it.image }
+            if (acceptedImages.isEmpty()) {
                 _uiState.value = _uiState.value.copy(
                     isMoving = false,
-                    error = "Reference folder not found"
+                    error = "No images selected for move"
                 )
                 return@launch
             }
 
-            val selectedIds = _uiState.value.moveCandidateIds
-            val acceptedImages = _uiState.value.filteredSuggestions
-                .filter { it.image.id in selectedIds }
-                .map { it.image }
-
-            val report = moveImagesUseCase(acceptedImages, refFolder.uri)
+            val report = moveImagesUseCase(acceptedImages, destinationFolderUri)
 
             val message = buildString {
-                append("Moved: ${report.moved}")
+                append("Moved to $destinationLabel: ${report.moved}")
                 if (report.copiedOnly > 0) append(", Copied only: ${report.copiedOnly}")
                 if (report.failed > 0) append(", Failed: ${report.failed}")
             }
@@ -312,9 +331,12 @@ class ResultsViewModel @Inject constructor(
     }
 
     fun getAcceptedImageUris(): List<Uri> {
-        val selectedIds = _uiState.value.moveCandidateIds
-        return _uiState.value.filteredSuggestions
-            .filter { it.image.id in selectedIds }
+        return getImageUris(_uiState.value.moveCandidateIds)
+    }
+
+    fun getImageUris(imageIds: Set<Long>): List<Uri> {
+        return _uiState.value.allSuggestions
+            .filter { it.image.id in imageIds }
             .map { it.image.uri }
     }
 

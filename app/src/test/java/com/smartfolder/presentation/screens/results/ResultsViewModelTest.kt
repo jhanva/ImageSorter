@@ -3,6 +3,8 @@ package com.smartfolder.presentation.screens.results
 import android.net.Uri
 import com.smartfolder.domain.model.ExecutionProfile
 import com.smartfolder.domain.model.Embedding
+import com.smartfolder.domain.model.Folder
+import com.smartfolder.domain.model.FolderRole
 import com.smartfolder.domain.model.ImageInfo
 import com.smartfolder.domain.model.ModelChoice
 import com.smartfolder.domain.model.SuggestionItem
@@ -232,6 +234,36 @@ class ResultsViewModelTest {
         val state = viewModel.uiState.value
         assertEquals(setOf(3L), state.selectedIds)
         assertEquals(1, state.manualVisibleBatchCount)
+    }
+
+    @Test
+    fun `manual mode can move an explicit batch to reference folder`() = runTest(mainDispatcherRule.dispatcher) {
+        val viewModel = createViewModel()
+        val destinationUri = mock(Uri::class.java)
+        val referenceFolder = Folder(
+            id = 99L,
+            uri = destinationUri,
+            displayName = "Reference",
+            role = FolderRole.REFERENCE
+        )
+        `when`(folderRepository.getByRole(FolderRole.REFERENCE)).thenReturn(listOf(referenceFolder))
+        `when`(moveImagesUseCase.invoke(listOf(thirdSuggestion.image, fourthSuggestion.image), destinationUri)).thenReturn(
+            MoveImagesUseCase.MoveReport(
+                moved = 2,
+                copiedOnly = 0,
+                failed = 0,
+                errors = emptyList(),
+                movedImageIds = setOf(3L, 4L)
+            )
+        )
+
+        advanceUntilIdle()
+        viewModel.moveImagesToReference(setOf(3L, 4L))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(setOf(1L, 2L), state.allSuggestions.map { it.image.id }.toSet())
+        assertEquals("Moved to A: 2", state.moveResultMessage)
     }
 
     private suspend fun createViewModel(): ResultsViewModel {
