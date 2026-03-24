@@ -73,6 +73,7 @@ class MoveImagesUseCaseTest {
         assertEquals(0, report.moved)
         assertEquals(1, report.copiedOnly)
         assertEquals(0, report.failed)
+        assertEquals(listOf("test.jpg: copied only (Could not delete)"), report.errors)
     }
 
     @Test

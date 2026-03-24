@@ -59,6 +59,7 @@ class MoveImagesUseCase @Inject constructor(
                 }
                 is MoveResult.CopiedOnly -> {
                     copiedOnly++
+                    errors.add("${image.displayName}: copied only (${result.reason})")
                 }
                 is MoveResult.Failure -> {
                     failed++

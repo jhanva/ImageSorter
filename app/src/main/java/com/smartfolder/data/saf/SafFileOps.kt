@@ -25,8 +25,12 @@ class SafFileOps @Inject constructor(
         val destFolder = DocumentFile.fromTreeUri(context, destinationFolderUri)
             ?: return MoveResult.Failure("Cannot access destination folder")
 
-        val resolvedMimeType = resolveMimeType(sourceUri, displayName)
-        val destFile = destFolder.createFile(resolvedMimeType, displayName)
+        val resolvedDisplayName = DestinationNameResolver.resolveUniqueDisplayName(
+            existingDisplayNames = destFolder.listFiles().mapNotNull { it.name }.toSet(),
+            requestedDisplayName = displayName
+        )
+        val resolvedMimeType = resolveMimeType(sourceUri, resolvedDisplayName)
+        val destFile = destFolder.createFile(resolvedMimeType, resolvedDisplayName)
             ?: return MoveResult.Failure("Cannot create file in destination folder")
 
         return try {
@@ -127,6 +131,38 @@ class SafFileOps @Inject constructor(
             "bmp" -> "image/bmp"
             "heif", "heic" -> "image/heif"
             else -> "image/*"
+        }
+    }
+}
+
+internal object DestinationNameResolver {
+    fun resolveUniqueDisplayName(
+        existingDisplayNames: Set<String>,
+        requestedDisplayName: String
+    ): String {
+        if (requestedDisplayName !in existingDisplayNames) {
+            return requestedDisplayName
+        }
+
+        val extension = requestedDisplayName.substringAfterLast('.', "")
+            .takeIf { requestedDisplayName.contains('.') }
+        val baseName = if (extension == null) {
+            requestedDisplayName
+        } else {
+            requestedDisplayName.removeSuffix(".$extension")
+        }
+
+        var index = 1
+        while (true) {
+            val candidate = if (extension == null) {
+                "$baseName ($index)"
+            } else {
+                "$baseName ($index).$extension"
+            }
+            if (candidate !in existingDisplayNames) {
+                return candidate
+            }
+            index++
         }
     }
 }

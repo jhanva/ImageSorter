@@ -14,18 +14,21 @@ ImageSorter supports two operation modes:
 2. **Manual mode**
    - Select folders A and B
    - Load all images from B directly (no model scoring required)
-   - Show the full batch from B in a scrollable thumbnail grid
-   - Tap thumbnails to select images, then move the selected batch to A
+   - Open an assisted offline review screen for B
+   - Search, filter, group, and bulk-pick likely representatives
+   - Move the selected batch to A
 
 During model review, you can stop early and move only what has been accepted so far.
 
-### Manual Batch Review
+### Manual Assisted Review
 
 Manual mode is designed for cases where the embedding suggestions are not reliable enough.
 
 - Displays the complete contents of folder B in a lazy thumbnail grid suitable for large folders
-- Uses direct thumbnail selection instead of one-by-one review
-- Includes quick actions to select all images or clear the current selection
+- Adds filename search, visible-result filtering, and alternate sort modes
+- Groups images into local time batches and filename-based variant groups
+- Includes quick actions to select all images, clear selection, pick the best image in visible name groups, or pick one lead per visible batch
+- Avoids accidental carry-over selection by trimming selected items to the current visible filter
 - Reuses the same move flow and write-permission prompts already used by the app
 
 Manual mode does not use threshold filtering or similarity scoring in the results screen.
@@ -158,6 +161,7 @@ Unit tests cover:
 - `IndexFolderUseCase` -- indexing pipeline
 - `AnalyzeImagesUseCase` -- analysis pipeline
 - `MoveImagesUseCase` -- file move operations
+- `DestinationNameResolver` -- collision-safe destination naming during SAF copy fallback
 - `ResultsViewModel` -- manual batch selection state and selected-image resolution
 
 Instrumented tests cover:
@@ -177,7 +181,7 @@ Available in the Settings screen:
 | Dark mode | Off | On / Off |
 
 Notes:
-- In manual mode, folder B is shown as a full thumbnail grid instead of scored suggestions.
+- In manual mode, folder B opens in assisted offline review instead of scored suggestions.
 - Threshold only affects model mode.
 
 ## Requirements

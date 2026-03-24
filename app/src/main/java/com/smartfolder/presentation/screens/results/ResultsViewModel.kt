@@ -218,6 +218,10 @@ class ResultsViewModel @Inject constructor(
                 if (report.copiedOnly > 0) append(", Copied only: ${report.copiedOnly}")
                 if (report.failed > 0) append(", Failed: ${report.failed}")
             }
+            val issueMessage = report.errors
+                .take(3)
+                .joinToString("\n")
+                .takeIf { it.isNotBlank() }
 
             val remaining = _uiState.value.allSuggestions
                 .filter { it.image.id !in report.movedImageIds }
@@ -230,7 +234,8 @@ class ResultsViewModel @Inject constructor(
                 selectedIds = emptySet(),
                 acceptedIds = emptySet(),
                 skippedIds = emptySet(),
-                moveResultMessage = message
+                moveResultMessage = message,
+                error = issueMessage
             )
             applyFilter()
             persistSuggestions(remaining)

@@ -164,7 +164,7 @@ fun HomeScreen(
                 Spacer(modifier = Modifier.height(8.dp))
             } else {
                 Text(
-                    text = "Manual mode enabled: images from folder B will be shown in a selectable thumbnail grid for batch move.",
+                    text = "Manual mode enabled: folder B opens in offline assisted review with search, grouping, smart picks, and batch move.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -258,7 +258,7 @@ fun HomeScreen(
                 enabled = uiState.canAnalyze && !uiState.isIndexingRef && !uiState.isIndexingUnsorted,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(if (uiState.manualMode) "Load Images for Manual Review" else "Analyze Images")
+                Text(if (uiState.manualMode) "Open Assisted Review" else "Analyze Images")
             }
         }
     }
