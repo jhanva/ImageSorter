@@ -164,7 +164,7 @@ fun HomeScreen(
                 Spacer(modifier = Modifier.height(8.dp))
             } else {
                 Text(
-                    text = "Manual mode enabled: folder B opens in offline assisted review with search, grouping, smart picks, and batch move.",
+                    text = "Assisted mode enabled: folder B opens in offline assisted review and prepares local visual groups before showing results.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -172,7 +172,7 @@ fun HomeScreen(
 
             // Reference folder (A)
             Text(
-                text = "Reference Folder (A)",
+                text = if (uiState.manualMode) "Reference Folder (A, optional)" else "Reference Folder (A)",
                 style = MaterialTheme.typography.titleMedium
             )
             if (uiState.referenceFolder != null) {

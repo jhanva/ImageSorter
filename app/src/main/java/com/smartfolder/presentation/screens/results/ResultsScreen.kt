@@ -403,64 +403,85 @@ private fun ManualSelectionContent(
             }
 
             if (showReviewTools) {
+                val availableFilters = buildList {
+                    add(ManualReviewFilter.ALL)
+                    if (uiState.manualVisualGroupCount > 0) add(ManualReviewFilter.VISUAL_GROUPS)
+                    if (uiState.manualNameGroupCount > 0) add(ManualReviewFilter.NAME_GROUPS)
+                    if (uiState.manualLargeFileCount > 0) add(ManualReviewFilter.LARGE_FILES)
+                    if (uiState.manualDuplicateGroupCount > 0) add(ManualReviewFilter.DUPLICATES)
+                    if (uiState.manualFilter !in this) add(uiState.manualFilter)
+                }
+                val availableSorts = buildList {
+                    add(ManualReviewSort.NEWEST)
+                    add(ManualReviewSort.NAME)
+                    add(ManualReviewSort.LARGEST)
+                    add(ManualReviewSort.BATCHES)
+                    if (uiState.manualVisualGroupCount > 0) add(ManualReviewSort.VISUAL_GROUPS)
+                    if (uiState.manualDuplicateGroupCount > 0) add(ManualReviewSort.DUPLICATES)
+                    if (uiState.manualSort !in this) add(uiState.manualSort)
+                }
+
                 ManualChipRow(
                     title = "Filter",
-                    options = ManualReviewFilter.entries.map { filter ->
+                    options = availableFilters.map { filter ->
                         Triple(filter.label, uiState.manualFilter == filter, { onFilterChange(filter) })
                     }
                 )
 
                 ManualChipRow(
                     title = "Sort",
-                    options = ManualReviewSort.entries.map { sort ->
+                    options = availableSorts.map { sort ->
                         Triple(sort.label, uiState.manualSort == sort, { onSortChange(sort) })
                     }
                 )
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onSelectBestInDuplicateGroups,
-                        enabled = uiState.manualVisibleDuplicateGroupCount > 0,
-                        modifier = Modifier.weight(1f)
+                if (uiState.manualVisibleDuplicateGroupCount > 0 || uiState.manualVisibleVisualGroupCount > 0) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text("Duplicate Picks")
-                    }
+                        if (uiState.manualVisibleDuplicateGroupCount > 0) {
+                            OutlinedButton(
+                                onClick = onSelectBestInDuplicateGroups,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Duplicate Picks")
+                            }
+                        }
 
-                    OutlinedButton(
-                        onClick = onSelectBestInVisualGroups,
-                        enabled = uiState.manualVisibleVisualGroupCount > 0,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Visual Picks")
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onSelectBatchLeads,
-                        enabled = uiState.manualVisibleBatchCount > 0,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Batch Leads")
+                        if (uiState.manualVisibleVisualGroupCount > 0) {
+                            OutlinedButton(
+                                onClick = onSelectBestInVisualGroups,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Visual Picks")
+                            }
+                        }
                     }
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onSelectBestInGroups,
-                        enabled = uiState.manualVisibleNameGroupCount > 0,
-                        modifier = Modifier.weight(1f)
+                if (uiState.manualVisibleBatchCount > 0 || uiState.manualVisibleNameGroupCount > 0) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text("Best In Groups")
+                        if (uiState.manualVisibleBatchCount > 0) {
+                            OutlinedButton(
+                                onClick = onSelectBatchLeads,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Batch Leads")
+                            }
+                        }
+
+                        if (uiState.manualVisibleNameGroupCount > 0) {
+                            OutlinedButton(
+                                onClick = onSelectBestInGroups,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Best In Groups")
+                            }
+                        }
                     }
                 }
 

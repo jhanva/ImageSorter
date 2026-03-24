@@ -8,6 +8,7 @@ import com.smartfolder.domain.repository.FolderRepository
 import com.smartfolder.domain.repository.SettingsRepository
 import com.smartfolder.domain.usecase.AnalyzeImagesUseCase
 import com.smartfolder.domain.usecase.BuildManualSuggestionsUseCase
+import com.smartfolder.domain.usecase.IndexFolderUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -23,6 +24,7 @@ import javax.inject.Inject
 class AnalysisViewModel @Inject constructor(
     private val analyzeImagesUseCase: AnalyzeImagesUseCase,
     private val buildManualSuggestionsUseCase: BuildManualSuggestionsUseCase,
+    private val indexFolderUseCase: IndexFolderUseCase,
     private val folderRepository: FolderRepository,
     private val settingsRepository: SettingsRepository
 ) : ViewModel() {
@@ -38,21 +40,63 @@ class AnalysisViewModel @Inject constructor(
             try {
                 _uiState.value = _uiState.value.copy(isAnalyzing = true, error = null)
 
-                val refFolder = folderRepository.getByRole(FolderRole.REFERENCE).maxByOrNull { it.id }
                 val unsortedFolder = folderRepository.getByRole(FolderRole.UNSORTED).maxByOrNull { it.id }
+                val manualMode = settingsRepository.manualMode.first()
 
-                if (refFolder == null || unsortedFolder == null) {
+                if (manualMode && unsortedFolder == null) {
+                    _uiState.value = _uiState.value.copy(
+                        isAnalyzing = false,
+                        error = "Unsorted folder must be selected"
+                    )
+                    return@launch
+                }
+
+                val refFolder = folderRepository.getByRole(FolderRole.REFERENCE).maxByOrNull { it.id }
+                if (!manualMode && (refFolder == null || unsortedFolder == null)) {
                     _uiState.value = _uiState.value.copy(
                         isAnalyzing = false,
                         error = "Both folders must be selected"
                     )
                     return@launch
                 }
+                val resolvedUnsortedFolder = unsortedFolder ?: return@launch
 
-                val manualMode = settingsRepository.manualMode.first()
                 if (manualMode) {
+                    val modelChoice = settingsRepository.modelChoice.first()
+                    val executionProfile = settingsRepository.executionProfile.first()
+                    var indexingFailed = false
+
+                    indexFolderUseCase(
+                        folder = resolvedUnsortedFolder,
+                        modelChoice = modelChoice,
+                        executionProfile = executionProfile
+                    ).collect { progress ->
+                        _uiState.value = _uiState.value.copy(
+                            progress = _uiState.value.progress.copy(
+                                phase = if (progress.phase == com.smartfolder.domain.model.IndexingPhase.ERROR) {
+                                    AnalysisPhase.ERROR
+                                } else {
+                                    AnalysisPhase.INDEXING_UNSORTED
+                                },
+                                current = progress.current,
+                                total = progress.total,
+                                currentFileName = progress.currentFileName,
+                                errorMessage = progress.errorMessage
+                            )
+                        )
+                        if (progress.phase == com.smartfolder.domain.model.IndexingPhase.ERROR) {
+                            indexingFailed = true
+                            _uiState.value = _uiState.value.copy(
+                                isAnalyzing = false,
+                                error = progress.errorMessage ?: "Failed to prepare assisted review"
+                            )
+                            return@collect
+                        }
+                    }
+                    if (indexingFailed) return@launch
+
                     val suggestions = withContext(Dispatchers.IO) {
-                        buildManualSuggestionsUseCase(unsortedFolder)
+                        buildManualSuggestionsUseCase(resolvedUnsortedFolder)
                     }
                     _uiState.value = _uiState.value.copy(
                         suggestions = suggestions,
@@ -69,10 +113,11 @@ class AnalysisViewModel @Inject constructor(
                 val modelChoice = settingsRepository.modelChoice.first()
                 val executionProfile = settingsRepository.executionProfile.first()
                 val threshold = settingsRepository.threshold.first()
+                val resolvedRefFolder = refFolder ?: return@launch
 
                 analyzeImagesUseCase(
-                    referenceFolder = refFolder,
-                    unsortedFolder = unsortedFolder,
+                    referenceFolder = resolvedRefFolder,
+                    unsortedFolder = resolvedUnsortedFolder,
                     modelChoice = modelChoice,
                     threshold = threshold,
                     executionProfile = executionProfile

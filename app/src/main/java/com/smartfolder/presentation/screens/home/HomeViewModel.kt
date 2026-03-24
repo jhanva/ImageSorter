@@ -197,15 +197,19 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun updateCanAnalyze() {
-        val ref = _uiState.value.referenceFolder
         val unsorted = _uiState.value.unsortedFolder
-        if (ref == null || unsorted == null) {
+        if (unsorted == null) {
             _uiState.value = _uiState.value.copy(canAnalyze = false)
             return
         }
         viewModelScope.launch {
             if (_uiState.value.manualMode) {
                 _uiState.value = _uiState.value.copy(canAnalyze = true)
+                return@launch
+            }
+            val ref = _uiState.value.referenceFolder
+            if (ref == null) {
+                _uiState.value = _uiState.value.copy(canAnalyze = false)
                 return@launch
             }
             val model = _uiState.value.modelChoice
