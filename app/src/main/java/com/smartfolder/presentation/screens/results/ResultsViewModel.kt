@@ -18,12 +18,14 @@ import com.smartfolder.domain.usecase.LoadSuggestionsUseCase
 import com.smartfolder.domain.usecase.MoveImagesUseCase
 import com.smartfolder.domain.usecase.RejectSuggestionUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
@@ -44,6 +46,7 @@ class ResultsViewModel @Inject constructor(
     private var manualDuplicateGroupKeys: Map<Long, String> = emptyMap()
     private var manualVisualGroupKeys: Map<Long, String> = emptyMap()
     private var manualClusterJob: Job? = null
+    private var applyFilterJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -226,10 +229,12 @@ class ResultsViewModel @Inject constructor(
         manualClusterJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isComputingManualVisualGroups = true)
             val embeddingsByImageId = loadManualEmbeddings(snapshotIds)
-            val clusterResult = ManualVisualClusterer.clusterSuggestions(
-                suggestions = suggestionsSnapshot,
-                embeddingsByImageId = embeddingsByImageId
-            )
+            val clusterResult = withContext(Dispatchers.Default) {
+                ManualVisualClusterer.clusterSuggestions(
+                    suggestions = suggestionsSnapshot,
+                    embeddingsByImageId = embeddingsByImageId
+                )
+            }
 
             val currentIds = _uiState.value.allSuggestions.map { it.image.id }
             if (currentIds != snapshotIds || !_uiState.value.manualMode) {
@@ -363,62 +368,94 @@ class ResultsViewModel @Inject constructor(
     }
 
     private fun applyFilter() {
-        if (_uiState.value.manualMode) {
-            val manualReview = ManualReviewOrganizer.organize(
-                suggestions = _uiState.value.allSuggestions,
-                query = _uiState.value.manualQuery,
-                filter = _uiState.value.manualFilter,
-                sort = _uiState.value.manualSort,
-                duplicateGroupKeys = manualDuplicateGroupKeys,
-                visualGroupKeys = manualVisualGroupKeys
-            )
-            val visibleIds = manualReview.visibleSuggestions.mapTo(linkedSetOf()) { it.image.id }
-            _uiState.value = _uiState.value.copy(
-                filteredSuggestions = manualReview.visibleSuggestions,
-                manualSections = manualReview.sections,
-                manualGridEntries = manualReview.gridEntries,
-                manualDuplicateGroupCount = manualReview.duplicateGroupCount,
-                manualVisualGroupCount = manualReview.visualGroupCount,
-                manualNameGroupCount = manualReview.nameGroupCount,
-                manualBatchCount = manualReview.batchCount,
-                manualLargeFileCount = manualReview.largeFileCount,
-                manualVisibleDuplicateGroupCount = manualReview.visibleDuplicateGroupCount,
-                manualVisibleVisualGroupCount = manualReview.visibleVisualGroupCount,
-                manualVisibleNameGroupCount = manualReview.visibleNameGroupCount,
-                manualVisibleBatchCount = manualReview.visibleBatchCount,
-                selectedIds = _uiState.value.selectedIds.filterTo(linkedSetOf()) { it in visibleIds },
-                isDebugTopFallback = false
-            )
-            return
-        }
-        val filtered = getSuggestionsUseCase(
-            _uiState.value.allSuggestions,
-            _uiState.value.threshold
-        )
-        if (BuildConfig.DEBUG && filtered.isEmpty() && _uiState.value.allSuggestions.isNotEmpty()) {
-            val top = _uiState.value.allSuggestions
-                .sortedByDescending { it.score }
-                .take(10)
-            _uiState.value = _uiState.value.copy(
-                filteredSuggestions = top,
-                isDebugTopFallback = true
-            )
-        } else {
-            _uiState.value = _uiState.value.copy(
-                filteredSuggestions = filtered,
-                manualSections = emptyList(),
-                manualGridEntries = emptyList(),
-                manualDuplicateGroupCount = 0,
-                manualVisualGroupCount = 0,
-                manualNameGroupCount = 0,
-                manualBatchCount = 0,
-                manualLargeFileCount = 0,
-                manualVisibleDuplicateGroupCount = 0,
-                manualVisibleVisualGroupCount = 0,
-                manualVisibleNameGroupCount = 0,
-                manualVisibleBatchCount = 0,
-                isDebugTopFallback = false
-            )
+        applyFilterJob?.cancel()
+        val stateSnapshot = _uiState.value
+        val duplicateKeysSnapshot = manualDuplicateGroupKeys
+        val visualKeysSnapshot = manualVisualGroupKeys
+
+        applyFilterJob = viewModelScope.launch {
+            if (stateSnapshot.manualMode) {
+                val manualReview = withContext(Dispatchers.Default) {
+                    ManualReviewOrganizer.organize(
+                        suggestions = stateSnapshot.allSuggestions,
+                        query = stateSnapshot.manualQuery,
+                        filter = stateSnapshot.manualFilter,
+                        sort = stateSnapshot.manualSort,
+                        duplicateGroupKeys = duplicateKeysSnapshot,
+                        visualGroupKeys = visualKeysSnapshot
+                    )
+                }
+                val latestState = _uiState.value
+                val latestIds = latestState.allSuggestions.map { it.image.id }
+                val snapshotIds = stateSnapshot.allSuggestions.map { it.image.id }
+                if (!latestState.manualMode ||
+                    latestIds != snapshotIds ||
+                    latestState.manualQuery != stateSnapshot.manualQuery ||
+                    latestState.manualFilter != stateSnapshot.manualFilter ||
+                    latestState.manualSort != stateSnapshot.manualSort
+                ) {
+                    return@launch
+                }
+
+                val visibleIds = manualReview.visibleSuggestions.mapTo(linkedSetOf()) { it.image.id }
+                _uiState.value = latestState.copy(
+                    filteredSuggestions = manualReview.visibleSuggestions,
+                    manualSections = manualReview.sections,
+                    manualGridEntries = manualReview.gridEntries,
+                    manualDuplicateGroupCount = manualReview.duplicateGroupCount,
+                    manualVisualGroupCount = manualReview.visualGroupCount,
+                    manualNameGroupCount = manualReview.nameGroupCount,
+                    manualBatchCount = manualReview.batchCount,
+                    manualLargeFileCount = manualReview.largeFileCount,
+                    manualVisibleDuplicateGroupCount = manualReview.visibleDuplicateGroupCount,
+                    manualVisibleVisualGroupCount = manualReview.visibleVisualGroupCount,
+                    manualVisibleNameGroupCount = manualReview.visibleNameGroupCount,
+                    manualVisibleBatchCount = manualReview.visibleBatchCount,
+                    selectedIds = latestState.selectedIds.filterTo(linkedSetOf()) { it in visibleIds },
+                    isDebugTopFallback = false
+                )
+                return@launch
+            }
+
+            val filtered = withContext(Dispatchers.Default) {
+                getSuggestionsUseCase(
+                    stateSnapshot.allSuggestions,
+                    stateSnapshot.threshold
+                )
+            }
+            val latestState = _uiState.value
+            if (latestState.manualMode ||
+                latestState.threshold != stateSnapshot.threshold ||
+                latestState.allSuggestions.map { it.image.id } != stateSnapshot.allSuggestions.map { it.image.id }
+            ) {
+                return@launch
+            }
+
+            if (BuildConfig.DEBUG && filtered.isEmpty() && stateSnapshot.allSuggestions.isNotEmpty()) {
+                val top = stateSnapshot.allSuggestions
+                    .sortedByDescending { it.score }
+                    .take(10)
+                _uiState.value = latestState.copy(
+                    filteredSuggestions = top,
+                    isDebugTopFallback = true
+                )
+            } else {
+                _uiState.value = latestState.copy(
+                    filteredSuggestions = filtered,
+                    manualSections = emptyList(),
+                    manualGridEntries = emptyList(),
+                    manualDuplicateGroupCount = 0,
+                    manualVisualGroupCount = 0,
+                    manualNameGroupCount = 0,
+                    manualBatchCount = 0,
+                    manualLargeFileCount = 0,
+                    manualVisibleDuplicateGroupCount = 0,
+                    manualVisibleVisualGroupCount = 0,
+                    manualVisibleNameGroupCount = 0,
+                    manualVisibleBatchCount = 0,
+                    isDebugTopFallback = false
+                )
+            }
         }
     }
 
