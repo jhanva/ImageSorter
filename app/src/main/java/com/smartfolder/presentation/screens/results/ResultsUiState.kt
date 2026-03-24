@@ -8,6 +8,14 @@ data class ResultsUiState(
     val isDebugTopFallback: Boolean = false,
     val threshold: Float = 0.80f,
     val manualMode: Boolean = false,
+    val manualQuery: String = "",
+    val manualFilter: ManualReviewFilter = ManualReviewFilter.ALL,
+    val manualSort: ManualReviewSort = ManualReviewSort.BATCHES,
+    val manualSections: List<ManualReviewSection> = emptyList(),
+    val manualGridEntries: List<ManualReviewGridEntry> = emptyList(),
+    val manualNameGroupCount: Int = 0,
+    val manualBatchCount: Int = 0,
+    val manualLargeFileCount: Int = 0,
     val selectedIds: Set<Long> = emptySet(),
     // Review mode: one-by-one image review
     val isReviewing: Boolean = false,
@@ -28,6 +36,7 @@ data class ResultsUiState(
             "${currentReviewIndex + 1} / ${filteredSuggestions.size}"
         } else ""
 
+    val visibleSuggestionCount: Int get() = filteredSuggestions.size
     val selectedCount: Int get() = selectedIds.size
     val acceptedCount: Int get() = acceptedIds.size
     val skippedCount: Int get() = skippedIds.size

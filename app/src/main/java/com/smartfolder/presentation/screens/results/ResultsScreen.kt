@@ -9,6 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
@@ -38,10 +40,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Surface
@@ -54,11 +58,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -116,7 +120,7 @@ fun ResultsScreen(
             TopAppBar(
                 title = {
                     if (uiState.manualMode) {
-                        Text("Select Images (${uiState.selectedCount}/${uiState.filteredSuggestions.size})")
+                        Text("Assisted Review (${uiState.selectedCount}/${uiState.visibleSuggestionCount})")
                     } else if (uiState.isReviewing) {
                         Text("Review ${uiState.reviewProgress}")
                     } else {
@@ -166,8 +170,12 @@ fun ResultsScreen(
                 uiState.manualMode -> ManualSelectionContent(
                     uiState = uiState,
                     onToggleSelection = viewModel::toggleSelection,
+                    onToggleSectionSelection = viewModel::toggleSectionSelection,
                     onSelectAll = viewModel::selectAllFiltered,
                     onClearSelection = viewModel::clearSelection,
+                    onQueryChange = viewModel::setManualQuery,
+                    onFilterChange = viewModel::setManualFilter,
+                    onSortChange = viewModel::setManualSort,
                     onMoveSelected = moveSelectedImages
                 )
                 uiState.reviewComplete -> ReviewSummary(
@@ -247,8 +255,12 @@ private fun SuggestionsList(
 private fun ManualSelectionContent(
     uiState: ResultsUiState,
     onToggleSelection: (Long) -> Unit,
+    onToggleSectionSelection: (Set<Long>) -> Unit,
     onSelectAll: () -> Unit,
     onClearSelection: () -> Unit,
+    onQueryChange: (String) -> Unit,
+    onFilterChange: (ManualReviewFilter) -> Unit,
+    onSortChange: (ManualReviewSort) -> Unit,
     onMoveSelected: () -> Unit
 ) {
     var showMoveConfirmation by remember { mutableStateOf(false) }
@@ -280,7 +292,7 @@ private fun ManualSelectionContent(
         )
     }
 
-    if (uiState.filteredSuggestions.isEmpty()) {
+    if (uiState.allSuggestions.isEmpty()) {
         EmptyState(
             title = "No Images Found",
             message = "No images from folder B are available for manual selection."
@@ -298,13 +310,40 @@ private fun ManualSelectionContent(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "${uiState.filteredSuggestions.size} images loaded from folder B",
+                text = "${uiState.allSuggestions.size} images loaded from folder B",
                 style = MaterialTheme.typography.titleMedium
             )
             Text(
-                text = "Tap a thumbnail to select it. ${uiState.selectedCount} image(s) selected.",
+                text = "Offline assisted review with local grouping. ${uiState.selectedCount} image(s) selected across ${uiState.visibleSuggestionCount} visible result(s).",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = "${uiState.manualBatchCount} batch group(s) - ${uiState.manualNameGroupCount} name group(s) - ${uiState.manualLargeFileCount} large file(s)",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            OutlinedTextField(
+                value = uiState.manualQuery,
+                onValueChange = onQueryChange,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("Search filenames") }
+            )
+
+            ManualChipRow(
+                title = "Filter",
+                options = ManualReviewFilter.entries.map { filter ->
+                    Triple(filter.label, uiState.manualFilter == filter, { onFilterChange(filter) })
+                }
+            )
+
+            ManualChipRow(
+                title = "Sort",
+                options = ManualReviewSort.entries.map { sort ->
+                    Triple(sort.label, uiState.manualSort == sort, { onSortChange(sort) })
+                }
             )
 
             Row(
@@ -329,22 +368,55 @@ private fun ManualSelectionContent(
             }
         }
 
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 140.dp),
-            modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(
-                items = uiState.filteredSuggestions,
-                key = { it.image.id }
-            ) { suggestion ->
-                ManualSuggestionGridItem(
-                    suggestion = suggestion,
-                    isSelected = suggestion.image.id in uiState.selectedIds,
-                    onClick = { onToggleSelection(suggestion.image.id) }
+        if (uiState.manualGridEntries.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                EmptyState(
+                    title = "No Results",
+                    message = "Try a different search or filter to keep reviewing."
                 )
+            }
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 140.dp),
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(
+                    items = uiState.manualGridEntries,
+                    key = { entry ->
+                        when (entry) {
+                            is ManualReviewGridEntry.Header -> "header-${entry.section.key}"
+                            is ManualReviewGridEntry.ImageItem -> entry.suggestion.image.id
+                        }
+                    },
+                    span = { entry ->
+                        when (entry) {
+                            is ManualReviewGridEntry.Header -> GridItemSpan(maxLineSpan)
+                            is ManualReviewGridEntry.ImageItem -> GridItemSpan(1)
+                        }
+                    }
+                ) { entry ->
+                    when (entry) {
+                        is ManualReviewGridEntry.Header -> ManualSectionHeader(
+                            section = entry.section,
+                            selectedIds = uiState.selectedIds,
+                            onToggleSectionSelection = onToggleSectionSelection
+                        )
+                        is ManualReviewGridEntry.ImageItem -> ManualSuggestionGridItem(
+                            suggestion = entry.suggestion,
+                            isSelected = entry.suggestion.image.id in uiState.selectedIds,
+                            onClick = { onToggleSelection(entry.suggestion.image.id) }
+                        )
+                    }
+                }
             }
         }
 
@@ -366,6 +438,74 @@ private fun ManualSelectionContent(
                 Spacer(modifier = Modifier.width(8.dp))
             }
             Text("Move ${uiState.moveCandidateCount} Selected Image(s)")
+        }
+    }
+}
+
+@Composable
+private fun ManualChipRow(
+    title: String,
+    options: List<Triple<String, Boolean, () -> Unit>>
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            options.forEach { (label, selected, onClick) ->
+                FilterChip(
+                    selected = selected,
+                    onClick = onClick,
+                    label = { Text(label) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ManualSectionHeader(
+    section: ManualReviewSection,
+    selectedIds: Set<Long>,
+    onToggleSectionSelection: (Set<Long>) -> Unit
+) {
+    val sectionIds = section.suggestions.mapTo(linkedSetOf()) { it.image.id }
+    val allSelected = sectionIds.isNotEmpty() && sectionIds.all { it in selectedIds }
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = section.title,
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Text(
+                    text = section.subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            OutlinedButton(onClick = { onToggleSectionSelection(sectionIds) }) {
+                Text(if (allSelected) "Clear Section" else "Select Section")
+            }
         }
     }
 }
@@ -467,7 +607,6 @@ private fun ReviewCard(
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Progress counters
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
@@ -486,7 +625,6 @@ private fun ReviewCard(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Image preview
         AsyncImage(
             model = suggestion.image.uri,
             contentDescription = suggestion.image.displayName,
@@ -499,14 +637,12 @@ private fun ReviewCard(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Image name
         Text(
             text = suggestion.image.displayName,
             style = MaterialTheme.typography.titleMedium,
             textAlign = TextAlign.Center
         )
 
-        // Score
         Text(
             text = "Score: %.1f%%".format(suggestion.score * 100),
             style = MaterialTheme.typography.bodyLarge,
@@ -515,7 +651,6 @@ private fun ReviewCard(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Similar images from reference folder
         if (suggestion.topSimilarFromA.isNotEmpty()) {
             Text(
                 text = "Similar in reference folder:",
@@ -528,7 +663,6 @@ private fun ReviewCard(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Accept / Skip buttons
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(16.dp)

@@ -50,9 +50,25 @@ class ResultsViewModelTest {
     private val secondSuggestion = suggestion(
         id = 2L,
         name = "second.jpg",
-        score = 0.10f
+        score = 0.10f,
+        sizeBytes = 3_000_000L,
+        lastModified = 1_005_000L
     )
-    private val allSuggestions = listOf(firstSuggestion, secondSuggestion)
+    private val thirdSuggestion = suggestion(
+        id = 3L,
+        name = "raiden-shogun-wallpaper-01.png",
+        score = 0.90f,
+        sizeBytes = 4_500_000L,
+        lastModified = 2_000_000L
+    )
+    private val fourthSuggestion = suggestion(
+        id = 4L,
+        name = "raiden_shogun_wallpaper_02.png",
+        score = 0.80f,
+        sizeBytes = 4_000_000L,
+        lastModified = 1_999_500L
+    )
+    private val allSuggestions = listOf(firstSuggestion, secondSuggestion, thirdSuggestion, fourthSuggestion)
 
     @Before
     fun setup() {
@@ -77,9 +93,10 @@ class ResultsViewModelTest {
 
         val state = viewModel.uiState.value
         assertTrue(state.manualMode)
-        assertEquals(2, state.allSuggestions.size)
-        assertEquals(2, state.filteredSuggestions.size)
-        assertEquals(listOf(1L, 2L), state.filteredSuggestions.map { it.image.id })
+        assertEquals(4, state.allSuggestions.size)
+        assertEquals(4, state.filteredSuggestions.size)
+        assertEquals(listOf(3L, 4L, 2L, 1L), state.filteredSuggestions.map { it.image.id })
+        assertEquals(1, state.manualBatchCount)
     }
 
     @Test
@@ -91,7 +108,7 @@ class ResultsViewModelTest {
         assertEquals(setOf(1L), viewModel.uiState.value.selectedIds)
 
         viewModel.selectAllFiltered()
-        assertEquals(setOf(1L, 2L), viewModel.uiState.value.selectedIds)
+        assertEquals(setOf(1L, 2L, 3L, 4L), viewModel.uiState.value.selectedIds)
 
         viewModel.clearSelection()
         assertTrue(viewModel.uiState.value.selectedIds.isEmpty())
@@ -107,6 +124,31 @@ class ResultsViewModelTest {
         val uris = viewModel.getAcceptedImageUris()
 
         assertEquals(listOf(secondSuggestion.image.uri), uris)
+    }
+
+    @Test
+    fun `manual mode can filter anime style name groups`() = runTest(mainDispatcherRule.dispatcher) {
+        val viewModel = createViewModel()
+
+        advanceUntilIdle()
+        viewModel.setManualFilter(ManualReviewFilter.NAME_GROUPS)
+
+        val state = viewModel.uiState.value
+        assertEquals(listOf(3L, 4L), state.filteredSuggestions.map { it.image.id })
+        assertEquals(1, state.manualNameGroupCount)
+    }
+
+    @Test
+    fun `manual mode trims section selection to current filter`() = runTest(mainDispatcherRule.dispatcher) {
+        val viewModel = createViewModel()
+
+        advanceUntilIdle()
+        viewModel.toggleSelection(1L)
+        viewModel.setManualQuery("raiden")
+
+        val state = viewModel.uiState.value
+        assertEquals(setOf(3L, 4L), state.filteredSuggestions.map { it.image.id }.toSet())
+        assertTrue(state.selectedIds.isEmpty())
     }
 
     private suspend fun createViewModel(): ResultsViewModel {
@@ -127,7 +169,9 @@ class ResultsViewModelTest {
     private fun suggestion(
         id: Long,
         name: String,
-        score: Float
+        score: Float,
+        sizeBytes: Long = 100L + id,
+        lastModified: Long = 1000L + id
     ): SuggestionItem {
         return SuggestionItem(
             image = ImageInfo(
@@ -136,8 +180,8 @@ class ResultsViewModelTest {
                 uri = mock(Uri::class.java),
                 displayName = name,
                 contentHash = "hash-$id",
-                sizeBytes = 100L + id,
-                lastModified = 1000L + id
+                sizeBytes = sizeBytes,
+                lastModified = lastModified
             ),
             score = score,
             centroidScore = score,

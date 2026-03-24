@@ -126,6 +126,17 @@ class ResultsViewModel @Inject constructor(
         )
     }
 
+    fun toggleSectionSelection(imageIds: Set<Long>) {
+        if (!_uiState.value.manualMode || imageIds.isEmpty()) return
+        val selectedIds = _uiState.value.selectedIds
+        val nextSelectedIds = if (imageIds.all { it in selectedIds }) {
+            selectedIds - imageIds
+        } else {
+            selectedIds + imageIds
+        }
+        _uiState.value = _uiState.value.copy(selectedIds = nextSelectedIds)
+    }
+
     fun selectAllFiltered() {
         if (!_uiState.value.manualMode) return
         _uiState.value = _uiState.value.copy(
@@ -136,6 +147,24 @@ class ResultsViewModel @Inject constructor(
     fun clearSelection() {
         if (!_uiState.value.manualMode) return
         _uiState.value = _uiState.value.copy(selectedIds = emptySet())
+    }
+
+    fun setManualQuery(query: String) {
+        if (!_uiState.value.manualMode) return
+        _uiState.value = _uiState.value.copy(manualQuery = query)
+        applyFilter()
+    }
+
+    fun setManualFilter(filter: ManualReviewFilter) {
+        if (!_uiState.value.manualMode) return
+        _uiState.value = _uiState.value.copy(manualFilter = filter)
+        applyFilter()
+    }
+
+    fun setManualSort(sort: ManualReviewSort) {
+        if (!_uiState.value.manualMode) return
+        _uiState.value = _uiState.value.copy(manualSort = sort)
+        applyFilter()
     }
 
     private fun advanceReview() {
@@ -225,8 +254,21 @@ class ResultsViewModel @Inject constructor(
 
     private fun applyFilter() {
         if (_uiState.value.manualMode) {
+            val manualReview = ManualReviewOrganizer.organize(
+                suggestions = _uiState.value.allSuggestions,
+                query = _uiState.value.manualQuery,
+                filter = _uiState.value.manualFilter,
+                sort = _uiState.value.manualSort
+            )
+            val visibleIds = manualReview.visibleSuggestions.mapTo(linkedSetOf()) { it.image.id }
             _uiState.value = _uiState.value.copy(
-                filteredSuggestions = _uiState.value.allSuggestions,
+                filteredSuggestions = manualReview.visibleSuggestions,
+                manualSections = manualReview.sections,
+                manualGridEntries = manualReview.gridEntries,
+                manualNameGroupCount = manualReview.nameGroupCount,
+                manualBatchCount = manualReview.batchCount,
+                manualLargeFileCount = manualReview.largeFileCount,
+                selectedIds = _uiState.value.selectedIds.filterTo(linkedSetOf()) { it in visibleIds },
                 isDebugTopFallback = false
             )
             return
@@ -246,6 +288,11 @@ class ResultsViewModel @Inject constructor(
         } else {
             _uiState.value = _uiState.value.copy(
                 filteredSuggestions = filtered,
+                manualSections = emptyList(),
+                manualGridEntries = emptyList(),
+                manualNameGroupCount = 0,
+                manualBatchCount = 0,
+                manualLargeFileCount = 0,
                 isDebugTopFallback = false
             )
         }
