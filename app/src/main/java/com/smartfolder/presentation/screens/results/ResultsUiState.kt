@@ -16,6 +16,8 @@ data class ResultsUiState(
     val manualNameGroupCount: Int = 0,
     val manualBatchCount: Int = 0,
     val manualLargeFileCount: Int = 0,
+    val manualVisibleNameGroupCount: Int = 0,
+    val manualVisibleBatchCount: Int = 0,
     val selectedIds: Set<Long> = emptySet(),
     // Review mode: one-by-one image review
     val isReviewing: Boolean = false,

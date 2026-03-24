@@ -149,6 +149,20 @@ class ResultsViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(selectedIds = emptySet())
     }
 
+    fun selectBestInVisibleNameGroups() {
+        if (!_uiState.value.manualMode) return
+        val bestIds = ManualReviewOrganizer.selectBestInNameGroups(_uiState.value.filteredSuggestions)
+        if (bestIds.isEmpty()) return
+        _uiState.value = _uiState.value.copy(selectedIds = bestIds)
+    }
+
+    fun selectVisibleBatchLeads() {
+        if (!_uiState.value.manualMode) return
+        val leadIds = ManualReviewOrganizer.selectBatchLeads(_uiState.value.filteredSuggestions)
+        if (leadIds.isEmpty()) return
+        _uiState.value = _uiState.value.copy(selectedIds = leadIds)
+    }
+
     fun setManualQuery(query: String) {
         if (!_uiState.value.manualMode) return
         _uiState.value = _uiState.value.copy(manualQuery = query)
@@ -268,6 +282,8 @@ class ResultsViewModel @Inject constructor(
                 manualNameGroupCount = manualReview.nameGroupCount,
                 manualBatchCount = manualReview.batchCount,
                 manualLargeFileCount = manualReview.largeFileCount,
+                manualVisibleNameGroupCount = manualReview.visibleNameGroupCount,
+                manualVisibleBatchCount = manualReview.visibleBatchCount,
                 selectedIds = _uiState.value.selectedIds.filterTo(linkedSetOf()) { it in visibleIds },
                 isDebugTopFallback = false
             )
@@ -293,6 +309,8 @@ class ResultsViewModel @Inject constructor(
                 manualNameGroupCount = 0,
                 manualBatchCount = 0,
                 manualLargeFileCount = 0,
+                manualVisibleNameGroupCount = 0,
+                manualVisibleBatchCount = 0,
                 isDebugTopFallback = false
             )
         }

@@ -40,7 +40,9 @@ internal object ManualReviewOrganizer {
         val gridEntries: List<ManualReviewGridEntry>,
         val nameGroupCount: Int,
         val batchCount: Int,
-        val largeFileCount: Int
+        val largeFileCount: Int,
+        val visibleNameGroupCount: Int,
+        val visibleBatchCount: Int
     )
 
     fun organize(
@@ -75,9 +77,14 @@ internal object ManualReviewOrganizer {
                 gridEntries = emptyList(),
                 nameGroupCount = nameGroups.values.count { it.size > 1 },
                 batchCount = batchGroups.count { it.size > 1 },
-                largeFileCount = suggestions.count { it.image.sizeBytes >= largeFileThreshold }
+                largeFileCount = suggestions.count { it.image.sizeBytes >= largeFileThreshold },
+                visibleNameGroupCount = 0,
+                visibleBatchCount = 0
             )
         }
+
+        val filteredNameGroups = buildNameGroups(filtered)
+        val filteredBatchGroups = buildBatchGroups(filtered)
 
         val sections = when (sort) {
             ManualReviewSort.BATCHES -> buildBatchSections(filtered)
@@ -105,8 +112,25 @@ internal object ManualReviewOrganizer {
             gridEntries = gridEntries,
             nameGroupCount = nameGroups.values.count { it.size > 1 },
             batchCount = batchGroups.count { it.size > 1 },
-            largeFileCount = suggestions.count { it.image.sizeBytes >= largeFileThreshold }
+            largeFileCount = suggestions.count { it.image.sizeBytes >= largeFileThreshold },
+            visibleNameGroupCount = filteredNameGroups.values.count { it.size > 1 },
+            visibleBatchCount = filteredBatchGroups.count { it.size > 1 }
         )
+    }
+
+    fun selectBestInNameGroups(suggestions: List<SuggestionItem>): Set<Long> {
+        return buildNameGroups(suggestions)
+            .values
+            .filter { it.size > 1 }
+            .mapNotNull { chooseBestCandidate(it)?.image?.id }
+            .toSet()
+    }
+
+    fun selectBatchLeads(suggestions: List<SuggestionItem>): Set<Long> {
+        return buildBatchGroups(suggestions)
+            .filter { it.size > 1 }
+            .mapNotNull { chooseBestCandidate(it)?.image?.id }
+            .toSet()
     }
 
     private fun singleSection(key: String, title: String, suggestions: List<SuggestionItem>): ManualReviewSection {
@@ -181,6 +205,14 @@ internal object ManualReviewOrganizer {
         val oldest = group.minOfOrNull { it.image.lastModified } ?: newest
         val minutes = ((newest - oldest) / 60000L).toInt()
         return if (minutes <= 0) "same minute" else "$minutes min span"
+    }
+
+    private fun chooseBestCandidate(suggestions: List<SuggestionItem>): SuggestionItem? {
+        return suggestions.maxWithOrNull(
+            compareBy<SuggestionItem> { it.image.sizeBytes }
+                .thenBy { it.image.lastModified }
+                .thenBy { it.image.displayName.lowercase(Locale.ROOT) }
+        )
     }
 
     internal fun normalizeNameGroupKey(displayName: String): String {

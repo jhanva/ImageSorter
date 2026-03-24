@@ -151,6 +151,31 @@ class ResultsViewModelTest {
         assertTrue(state.selectedIds.isEmpty())
     }
 
+    @Test
+    fun `manual mode can pick best image per visible name group`() = runTest(mainDispatcherRule.dispatcher) {
+        val viewModel = createViewModel()
+
+        advanceUntilIdle()
+        viewModel.setManualFilter(ManualReviewFilter.NAME_GROUPS)
+        viewModel.selectBestInVisibleNameGroups()
+
+        val state = viewModel.uiState.value
+        assertEquals(setOf(3L), state.selectedIds)
+        assertEquals(1, state.manualVisibleNameGroupCount)
+    }
+
+    @Test
+    fun `manual mode can pick batch leads from visible results`() = runTest(mainDispatcherRule.dispatcher) {
+        val viewModel = createViewModel()
+
+        advanceUntilIdle()
+        viewModel.selectVisibleBatchLeads()
+
+        val state = viewModel.uiState.value
+        assertEquals(setOf(3L), state.selectedIds)
+        assertEquals(1, state.manualVisibleBatchCount)
+    }
+
     private suspend fun createViewModel(): ResultsViewModel {
         `when`(loadSuggestionsUseCase.invoke()).thenReturn(allSuggestions)
         `when`(getSuggestionsUseCase.invoke(emptyList(), 0.80f)).thenReturn(emptyList())

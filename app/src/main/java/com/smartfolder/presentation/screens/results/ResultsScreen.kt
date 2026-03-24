@@ -173,6 +173,8 @@ fun ResultsScreen(
                     onToggleSectionSelection = viewModel::toggleSectionSelection,
                     onSelectAll = viewModel::selectAllFiltered,
                     onClearSelection = viewModel::clearSelection,
+                    onSelectBestInGroups = viewModel::selectBestInVisibleNameGroups,
+                    onSelectBatchLeads = viewModel::selectVisibleBatchLeads,
                     onQueryChange = viewModel::setManualQuery,
                     onFilterChange = viewModel::setManualFilter,
                     onSortChange = viewModel::setManualSort,
@@ -258,6 +260,8 @@ private fun ManualSelectionContent(
     onToggleSectionSelection: (Set<Long>) -> Unit,
     onSelectAll: () -> Unit,
     onClearSelection: () -> Unit,
+    onSelectBestInGroups: () -> Unit,
+    onSelectBatchLeads: () -> Unit,
     onQueryChange: (String) -> Unit,
     onFilterChange: (ManualReviewFilter) -> Unit,
     onSortChange: (ManualReviewSort) -> Unit,
@@ -364,6 +368,27 @@ private fun ManualSelectionContent(
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Clear")
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onSelectBestInGroups,
+                    enabled = uiState.manualVisibleNameGroupCount > 0,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Pick Best In Groups")
+                }
+
+                OutlinedButton(
+                    onClick = onSelectBatchLeads,
+                    enabled = uiState.manualVisibleBatchCount > 0,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Pick Batch Leads")
                 }
             }
         }
