@@ -7,8 +7,11 @@ import kotlin.math.max
 import kotlin.math.min
 
 internal object ManualVisualClusterer {
-    private const val VISUAL_CLUSTER_THRESHOLD = 0.93f
-    private const val MIN_VISUAL_SIMILARITY = 0.89f
+    private const val VISUAL_SEED_THRESHOLD = 0.918f
+    private const val MIN_CLUSTER_MAX_SIMILARITY = 0.93f
+    private const val MIN_CLUSTER_AVERAGE_SIMILARITY = 0.91f
+    private const val MIN_CLUSTER_ANCHOR_SIMILARITY = 0.90f
+    private const val ADAPTIVE_CLUSTERING_MIN_CANDIDATES = 12
     private const val DUPLICATE_CLUSTER_THRESHOLD = 0.992f
     private const val MIN_DUPLICATE_SIZE_RATIO = 0.9f
 
@@ -17,12 +20,21 @@ internal object ManualVisualClusterer {
         val visualGroupKeys: Map<Long, String> = emptyMap()
     )
 
+    private data class ClusterThresholds(
+        val seed: Float,
+        val max: Float,
+        val average: Float,
+        val anchor: Float
+    )
+
     fun clusterSuggestions(
         suggestions: List<SuggestionItem>,
         embeddingsByImageId: Map<Long, Embedding>
     ): ClusterResult {
         val candidates = suggestions.filter { it.image.id in embeddingsByImageId }
         if (candidates.size < 2) return ClusterResult()
+        val similarityMatrix = buildSimilarityMatrix(candidates, embeddingsByImageId)
+        val thresholds = resolveThresholds(candidates.size, similarityMatrix)
 
         val duplicateUnionFind = UnionFind(candidates.size)
 
@@ -38,25 +50,21 @@ internal object ManualVisualClusterer {
 
         for (i in 0 until candidates.lastIndex) {
             val left = candidates[i]
-            val leftEmbedding = embeddingsByImageId[left.image.id] ?: continue
             for (j in i + 1 until candidates.size) {
                 val right = candidates[j]
-                val rightEmbedding = embeddingsByImageId[right.image.id] ?: continue
-                val similarity = SimilarityCalculator.cosineSimilarity(
-                    leftEmbedding.vector,
-                    rightEmbedding.vector
-                )
-                if (similarity >= VISUAL_CLUSTER_THRESHOLD) {
-                    if (isNearDuplicate(left, right, similarity)) {
-                        duplicateUnionFind.union(i, j)
-                    }
-                } else if (isNearDuplicate(left, right, similarity)) {
+                val similarity = similarityMatrix[i][j]
+                if (isNearDuplicate(left, right, similarity)) {
                     duplicateUnionFind.union(i, j)
                 }
             }
         }
 
-        val visualGroupKeys = buildVisualGroupKeys(candidates, embeddingsByImageId)
+        val visualGroupKeys = buildVisualGroupKeys(
+            candidates = candidates,
+            embeddingsByImageId = embeddingsByImageId,
+            similarityMatrix = similarityMatrix,
+            thresholds = thresholds
+        )
 
         return ClusterResult(
             duplicateGroupKeys = buildGroupKeys(candidates, duplicateUnionFind, "duplicate"),
@@ -66,7 +74,9 @@ internal object ManualVisualClusterer {
 
     private fun buildVisualGroupKeys(
         candidates: List<SuggestionItem>,
-        embeddingsByImageId: Map<Long, Embedding>
+        embeddingsByImageId: Map<Long, Embedding>,
+        similarityMatrix: Array<FloatArray>,
+        thresholds: ClusterThresholds
     ): Map<Long, String> {
         val sortedIndices = candidates.indices.sortedWith(
             compareByDescending<Int> { candidates[it].image.sizeBytes }
@@ -76,20 +86,20 @@ internal object ManualVisualClusterer {
 
         sortedIndices.forEach { candidateIndex ->
             val candidate = candidates[candidateIndex]
-            val candidateEmbedding = embeddingsByImageId[candidate.image.id] ?: return@forEach
+            if (embeddingsByImageId[candidate.image.id] == null) return@forEach
 
             val bestClusterIndex = clusters
                 .mapIndexedNotNull { clusterIndex, cluster ->
-                    val anchorIndex = cluster.first()
-                    val anchor = candidates[anchorIndex]
-                    val anchorEmbedding = embeddingsByImageId[anchor.image.id] ?: return@mapIndexedNotNull null
-                    val similarity = SimilarityCalculator.cosineSimilarity(
-                        candidateEmbedding.vector,
-                        anchorEmbedding.vector
+                    val match = scoreClusterMatch(
+                        candidateIndex = candidateIndex,
+                        cluster = cluster,
+                        candidates = candidates,
+                        embeddingsByImageId = embeddingsByImageId,
+                        similarityMatrix = similarityMatrix,
+                        thresholds = thresholds
                     )
-                    val hybridScore = computeHybridVisualScore(candidate, anchor, similarity)
-                    if (shouldJoinVisualCluster(candidate, anchor, similarity, hybridScore)) {
-                        clusterIndex to hybridScore
+                    if (match.shouldJoin) {
+                        clusterIndex to match.score
                     } else {
                         null
                     }
@@ -116,6 +126,59 @@ internal object ManualVisualClusterer {
         }
     }
 
+    private data class ClusterMatch(
+        val shouldJoin: Boolean,
+        val score: Float
+    )
+
+    private fun scoreClusterMatch(
+        candidateIndex: Int,
+        cluster: List<Int>,
+        candidates: List<SuggestionItem>,
+        embeddingsByImageId: Map<Long, Embedding>,
+        similarityMatrix: Array<FloatArray>,
+        thresholds: ClusterThresholds
+    ): ClusterMatch {
+        val similarities = cluster
+            .map { memberIndex -> similarityMatrix[candidateIndex][memberIndex] }
+            .sortedDescending()
+
+        if (similarities.isEmpty()) return ClusterMatch(shouldJoin = false, score = 0f)
+
+        val anchor = candidates[cluster.first()]
+        if (embeddingsByImageId[anchor.image.id] == null) return ClusterMatch(false, 0f)
+        val anchorSimilarity = similarityMatrix[candidateIndex][cluster.first()]
+        val maxSimilarity = similarities.first()
+        val averageSimilarity = similarities
+            .take(min(3, similarities.size))
+            .average()
+            .toFloat()
+        val candidate = candidates[candidateIndex]
+        val sizeRatio = resolveSizeRatio(candidate, anchor)
+        val score = computeClusterScore(
+            maxSimilarity = maxSimilarity,
+            averageSimilarity = averageSimilarity,
+            anchorSimilarity = anchorSimilarity,
+            sizeRatio = sizeRatio
+        )
+
+        if (cluster.size == 1) {
+            return ClusterMatch(
+                shouldJoin = maxSimilarity >= thresholds.seed,
+                score = score
+            )
+        }
+
+        val shouldJoin = maxSimilarity >= thresholds.max &&
+            averageSimilarity >= thresholds.average &&
+            anchorSimilarity >= thresholds.anchor
+
+        return ClusterMatch(
+            shouldJoin = shouldJoin,
+            score = score
+        )
+    }
+
     private fun isNearDuplicate(
         left: SuggestionItem,
         right: SuggestionItem,
@@ -128,50 +191,99 @@ internal object ManualVisualClusterer {
         return (smaller / larger) >= MIN_DUPLICATE_SIZE_RATIO
     }
 
-    private fun shouldJoinVisualCluster(
-        left: SuggestionItem,
-        right: SuggestionItem,
-        similarity: Float,
-        hybridScore: Float
-    ): Boolean {
-        if (similarity < MIN_VISUAL_SIMILARITY) return false
-        if (hybridScore < VISUAL_CLUSTER_THRESHOLD) return false
-
-        val nameOverlap = nameOverlapScore(left.image.displayName, right.image.displayName)
-        if (nameOverlap <= 0f && similarity < 0.915f) return false
-
-        return true
+    private fun computeClusterScore(
+        maxSimilarity: Float,
+        averageSimilarity: Float,
+        anchorSimilarity: Float,
+        sizeRatio: Float
+    ): Float {
+        val sizeBonus = ((sizeRatio - 0.70f).coerceAtLeast(0f) / 0.30f) * 0.01f
+        return (maxSimilarity * 0.45f) +
+            (averageSimilarity * 0.40f) +
+            (anchorSimilarity * 0.15f) +
+            sizeBonus
     }
 
-    private fun computeHybridVisualScore(
-        left: SuggestionItem,
-        right: SuggestionItem,
-        similarity: Float
-    ): Float {
-        val nameOverlap = nameOverlapScore(left.image.displayName, right.image.displayName)
+    private fun resolveSizeRatio(left: SuggestionItem, right: SuggestionItem): Float {
         val smaller = min(left.image.sizeBytes, right.image.sizeBytes).toFloat()
         val larger = max(left.image.sizeBytes, right.image.sizeBytes).toFloat()
-        val sizeRatio = if (smaller <= 0f || larger <= 0f) 0f else smaller / larger
-        val sizeBonus = ((sizeRatio - 0.75f).coerceAtLeast(0f) / 0.25f) * 0.015f
-        val nameBonus = nameOverlap * 0.025f
-        return similarity + sizeBonus + nameBonus
+        if (smaller <= 0f || larger <= 0f) return 0f
+        return smaller / larger
     }
 
-    private fun nameOverlapScore(leftName: String, rightName: String): Float {
-        val leftTokens = normalizedTokens(leftName)
-        val rightTokens = normalizedTokens(rightName)
-        if (leftTokens.isEmpty() || rightTokens.isEmpty()) return 0f
-        val intersection = leftTokens.intersect(rightTokens).size.toFloat()
-        val union = (leftTokens + rightTokens).size.toFloat()
-        return if (union == 0f) 0f else intersection / union
+    private fun buildSimilarityMatrix(
+        candidates: List<SuggestionItem>,
+        embeddingsByImageId: Map<Long, Embedding>
+    ): Array<FloatArray> {
+        val matrix = Array(candidates.size) { FloatArray(candidates.size) }
+        for (i in candidates.indices) {
+            matrix[i][i] = 1f
+        }
+        for (i in 0 until candidates.lastIndex) {
+            val leftEmbedding = embeddingsByImageId[candidates[i].image.id] ?: continue
+            for (j in i + 1 until candidates.size) {
+                val rightEmbedding = embeddingsByImageId[candidates[j].image.id] ?: continue
+                val similarity = SimilarityCalculator.cosineSimilarity(
+                    leftEmbedding.vector,
+                    rightEmbedding.vector
+                )
+                matrix[i][j] = similarity
+                matrix[j][i] = similarity
+            }
+        }
+        return matrix
     }
 
-    private fun normalizedTokens(displayName: String): Set<String> {
-        val normalized = ManualReviewOrganizer.normalizeNameGroupKey(displayName)
-        return normalized.split(' ')
-            .filter { it.isNotBlank() }
-            .toSet()
+    private fun resolveThresholds(
+        candidateCount: Int,
+        similarityMatrix: Array<FloatArray>
+    ): ClusterThresholds {
+        if (candidateCount < ADAPTIVE_CLUSTERING_MIN_CANDIDATES) {
+            return defaultThresholds()
+        }
+
+        val similarities = mutableListOf<Float>()
+        for (i in 0 until similarityMatrix.lastIndex) {
+            for (j in i + 1 until similarityMatrix.size) {
+                similarities += similarityMatrix[i][j]
+            }
+        }
+        if (similarities.size < 20) {
+            return defaultThresholds()
+        }
+
+        similarities.sort()
+        val adaptiveSeed = percentile(similarities, 0.90f)
+            .coerceIn(VISUAL_SEED_THRESHOLD, 0.965f)
+        val adaptiveMax = max(MIN_CLUSTER_MAX_SIMILARITY, adaptiveSeed)
+        val adaptiveAverage = max(
+            MIN_CLUSTER_AVERAGE_SIMILARITY,
+            (adaptiveSeed - 0.01f).coerceAtMost(adaptiveMax)
+        )
+        val adaptiveAnchor = max(
+            MIN_CLUSTER_ANCHOR_SIMILARITY,
+            adaptiveSeed - 0.025f
+        )
+        return ClusterThresholds(
+            seed = adaptiveSeed,
+            max = adaptiveMax,
+            average = adaptiveAverage,
+            anchor = adaptiveAnchor
+        )
     }
+
+    private fun percentile(values: List<Float>, ratio: Float): Float {
+        if (values.isEmpty()) return 0f
+        val index = ((values.lastIndex) * ratio).toInt().coerceIn(0, values.lastIndex)
+        return values[index]
+    }
+
+    private fun defaultThresholds() = ClusterThresholds(
+        seed = VISUAL_SEED_THRESHOLD,
+        max = MIN_CLUSTER_MAX_SIMILARITY,
+        average = MIN_CLUSTER_AVERAGE_SIMILARITY,
+        anchor = MIN_CLUSTER_ANCHOR_SIMILARITY
+    )
 
     private fun buildGroupKeys(
         candidates: List<SuggestionItem>,

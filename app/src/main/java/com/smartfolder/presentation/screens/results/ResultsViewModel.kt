@@ -13,6 +13,7 @@ import com.smartfolder.domain.repository.FolderRepository
 import com.smartfolder.domain.repository.SettingsRepository
 import com.smartfolder.domain.repository.SuggestionRepository
 import com.smartfolder.domain.usecase.AcceptSuggestionUseCase
+import com.smartfolder.domain.usecase.BuildManualSuggestionsUseCase
 import com.smartfolder.domain.usecase.GetSuggestionsUseCase
 import com.smartfolder.domain.usecase.LoadSuggestionsUseCase
 import com.smartfolder.domain.usecase.MoveImagesUseCase
@@ -37,6 +38,7 @@ class ResultsViewModel @Inject constructor(
     private val folderRepository: FolderRepository,
     private val embeddingRepository: EmbeddingRepository,
     private val settingsRepository: SettingsRepository,
+    private val buildManualSuggestionsUseCase: BuildManualSuggestionsUseCase,
     private val loadSuggestionsUseCase: LoadSuggestionsUseCase,
     private val suggestionRepository: SuggestionRepository
 ) : ViewModel() {
@@ -68,9 +70,9 @@ class ResultsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            val stored = loadSuggestionsUseCase()
-            if (stored.isNotEmpty()) {
-                _uiState.value = _uiState.value.copy(allSuggestions = stored)
+            val suggestions = loadInitialSuggestions()
+            if (suggestions.isNotEmpty()) {
+                _uiState.value = _uiState.value.copy(allSuggestions = suggestions)
                 refreshManualVisualGroups()
                 applyFilter()
             }
@@ -161,13 +163,6 @@ class ResultsViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(selectedIds = emptySet())
     }
 
-    fun selectBestInVisibleNameGroups() {
-        if (!_uiState.value.manualMode) return
-        val bestIds = ManualReviewOrganizer.selectBestInNameGroups(_uiState.value.filteredSuggestions)
-        if (bestIds.isEmpty()) return
-        _uiState.value = _uiState.value.copy(selectedIds = bestIds)
-    }
-
     fun selectBestInVisibleDuplicateGroups() {
         if (!_uiState.value.manualMode) return
         val bestIds = ManualReviewOrganizer.selectBestInDuplicateGroups(
@@ -186,13 +181,6 @@ class ResultsViewModel @Inject constructor(
         )
         if (bestIds.isEmpty()) return
         _uiState.value = _uiState.value.copy(selectedIds = bestIds)
-    }
-
-    fun selectVisibleBatchLeads() {
-        if (!_uiState.value.manualMode) return
-        val leadIds = ManualReviewOrganizer.selectBatchLeads(_uiState.value.filteredSuggestions)
-        if (leadIds.isEmpty()) return
-        _uiState.value = _uiState.value.copy(selectedIds = leadIds)
     }
 
     fun setManualQuery(query: String) {
@@ -250,9 +238,41 @@ class ResultsViewModel @Inject constructor(
 
     private suspend fun loadManualEmbeddings(imageIds: List<Long>): Map<Long, Embedding> {
         val modelChoice = settingsRepository.modelChoice.first()
-        return embeddingRepository.getByImageIds(imageIds)
+        val embeddings = embeddingRepository.getByImageIds(imageIds)
+        if (embeddings.isEmpty()) return emptyMap()
+
+        val preferredByImageId = embeddings
             .filter { it.modelName == modelChoice.modelFileName }
-            .associateBy { it.imageId }
+            .groupBy { it.imageId }
+            .mapValues { (_, values) -> values.maxByOrNull { it.createdAt }!! }
+
+        if (preferredByImageId.size == imageIds.size) {
+            return preferredByImageId
+        }
+
+        val latestByImageId = embeddings
+            .groupBy { it.imageId }
+            .mapValues { (_, values) -> values.maxByOrNull { it.createdAt }!! }
+
+        return imageIds.mapNotNull { imageId ->
+            val embedding = preferredByImageId[imageId] ?: latestByImageId[imageId]
+            embedding?.let { imageId to it }
+        }.toMap()
+    }
+
+    private suspend fun loadInitialSuggestions(): List<SuggestionItem> {
+        val stored = loadSuggestionsUseCase()
+        if (stored.isNotEmpty()) {
+            return stored
+        }
+
+        if (!settingsRepository.manualMode.first()) {
+            return emptyList()
+        }
+
+        val unsortedFolder = folderRepository.getByRole(FolderRole.UNSORTED).maxByOrNull { it.id }
+            ?: return emptyList()
+        return buildManualSuggestionsUseCase(unsortedFolder)
     }
 
     private fun advanceReview() {
@@ -404,12 +424,10 @@ class ResultsViewModel @Inject constructor(
                     manualGridEntries = manualReview.gridEntries,
                     manualDuplicateGroupCount = manualReview.duplicateGroupCount,
                     manualVisualGroupCount = manualReview.visualGroupCount,
-                    manualNameGroupCount = manualReview.nameGroupCount,
                     manualBatchCount = manualReview.batchCount,
                     manualLargeFileCount = manualReview.largeFileCount,
                     manualVisibleDuplicateGroupCount = manualReview.visibleDuplicateGroupCount,
                     manualVisibleVisualGroupCount = manualReview.visibleVisualGroupCount,
-                    manualVisibleNameGroupCount = manualReview.visibleNameGroupCount,
                     manualVisibleBatchCount = manualReview.visibleBatchCount,
                     selectedIds = latestState.selectedIds.filterTo(linkedSetOf()) { it in visibleIds },
                     isDebugTopFallback = false
@@ -446,12 +464,10 @@ class ResultsViewModel @Inject constructor(
                     manualGridEntries = emptyList(),
                     manualDuplicateGroupCount = 0,
                     manualVisualGroupCount = 0,
-                    manualNameGroupCount = 0,
                     manualBatchCount = 0,
                     manualLargeFileCount = 0,
                     manualVisibleDuplicateGroupCount = 0,
                     manualVisibleVisualGroupCount = 0,
-                    manualVisibleNameGroupCount = 0,
                     manualVisibleBatchCount = 0,
                     isDebugTopFallback = false
                 )

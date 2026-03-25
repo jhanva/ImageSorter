@@ -182,8 +182,6 @@ fun ResultsScreen(
                     onClearSelection = viewModel::clearSelection,
                     onSelectBestInDuplicateGroups = viewModel::selectBestInVisibleDuplicateGroups,
                     onSelectBestInVisualGroups = viewModel::selectBestInVisibleVisualGroups,
-                    onSelectBestInGroups = viewModel::selectBestInVisibleNameGroups,
-                    onSelectBatchLeads = viewModel::selectVisibleBatchLeads,
                     onFilterChange = viewModel::setManualFilter,
                     onSortChange = viewModel::setManualSort,
                     onMoveToReference = requestMoveToReference
@@ -270,8 +268,6 @@ private fun ManualSelectionContent(
     onClearSelection: () -> Unit,
     onSelectBestInDuplicateGroups: () -> Unit,
     onSelectBestInVisualGroups: () -> Unit,
-    onSelectBestInGroups: () -> Unit,
-    onSelectBatchLeads: () -> Unit,
     onFilterChange: (ManualReviewFilter) -> Unit,
     onSortChange: (ManualReviewSort) -> Unit,
     onMoveToReference: (Set<Long>) -> Unit
@@ -325,11 +321,11 @@ private fun ManualSelectionContent(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "${uiState.visibleSuggestionCount}/${uiState.allSuggestions.size} visible • ${uiState.selectedCount} selected",
+                text = "${uiState.visibleSuggestionCount}/${uiState.allSuggestions.size} visible | ${uiState.selectedCount} selected",
                 style = MaterialTheme.typography.titleSmall
             )
             Text(
-                text = "${uiState.manualVisibleVisualGroupCount} visual group(s) • ${uiState.manualVisibleBatchCount} batch group(s) • ${uiState.manualVisibleNameGroupCount} name group(s)",
+                text = "${uiState.manualVisibleVisualGroupCount} visual group(s) | ${uiState.manualVisibleDuplicateGroupCount} duplicate set(s) | ${uiState.manualVisibleBatchCount} batch group(s)",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -357,22 +353,18 @@ private fun ManualSelectionContent(
                     onClick = {
                         if (uiState.manualVisibleDuplicateGroupCount > 0) {
                             onSelectBestInDuplicateGroups()
-                        } else if (uiState.manualVisibleVisualGroupCount > 0) {
-                            onSelectBestInVisualGroups()
                         } else {
-                            onSelectBestInGroups()
+                            onSelectBestInVisualGroups()
                         }
                     },
                     enabled = uiState.manualVisibleDuplicateGroupCount > 0 ||
-                        uiState.manualVisibleVisualGroupCount > 0 ||
-                        uiState.manualVisibleNameGroupCount > 0,
+                        uiState.manualVisibleVisualGroupCount > 0,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(
                         when {
                             uiState.manualVisibleDuplicateGroupCount > 0 -> "Duplicate Picks"
-                            uiState.manualVisibleVisualGroupCount > 0 -> "Visual Picks"
-                            else -> "Quick Pick"
+                            else -> "Visual Picks"
                         }
                     )
                 }
@@ -403,7 +395,6 @@ private fun ManualSelectionContent(
                 val availableFilters = buildList {
                     add(ManualReviewFilter.ALL)
                     if (uiState.manualVisualGroupCount > 0) add(ManualReviewFilter.VISUAL_GROUPS)
-                    if (uiState.manualNameGroupCount > 0) add(ManualReviewFilter.NAME_GROUPS)
                     if (uiState.manualLargeFileCount > 0) add(ManualReviewFilter.LARGE_FILES)
                     if (uiState.manualDuplicateGroupCount > 0) add(ManualReviewFilter.DUPLICATES)
                     if (uiState.manualFilter !in this) add(uiState.manualFilter)
@@ -591,7 +582,7 @@ private fun ManualSectionHeader(
                     onClick = { onToggleSectionSelection(sectionIds) },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text(if (allSelected) "Clear Batch" else "Select Batch")
+                    Text(if (allSelected) "Clear Section" else "Select Section")
                 }
 
                 Button(
@@ -885,3 +876,5 @@ private fun ReviewSummary(
         }
     }
 }
+
+

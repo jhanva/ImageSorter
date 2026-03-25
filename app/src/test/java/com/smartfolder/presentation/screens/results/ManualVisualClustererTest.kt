@@ -68,6 +68,28 @@ class ManualVisualClustererTest {
         assertTrue(clusterResult.visualGroupKeys[3L] == null)
     }
 
+    @Test
+    fun `clusters visually consistent anime variants even without name overlap`() {
+        val suggestions = listOf(
+            suggestion(1L, "001.png", sizeBytes = 4200L),
+            suggestion(2L, "img_x7.png", sizeBytes = 4100L),
+            suggestion(3L, "scan_final.png", sizeBytes = 4050L),
+            suggestion(4L, "landscape.png", sizeBytes = 3900L)
+        )
+        val embeddings = listOf(
+            embedding(1L, floatArrayOf(1f, 0f, 0f)),
+            embedding(2L, floatArrayOf(0.94f, 0.3412f, 0f)),
+            embedding(3L, floatArrayOf(0.905f, 0.4254f, 0f)),
+            embedding(4L, floatArrayOf(0f, 1f, 0f))
+        ).associateBy { it.imageId }
+
+        val clusterResult = ManualVisualClusterer.clusterSuggestions(suggestions, embeddings)
+
+        assertEquals(clusterResult.visualGroupKeys[1L], clusterResult.visualGroupKeys[2L])
+        assertEquals(clusterResult.visualGroupKeys[1L], clusterResult.visualGroupKeys[3L])
+        assertTrue(clusterResult.visualGroupKeys[4L] == null)
+    }
+
     private fun suggestion(
         id: Long,
         name: String,

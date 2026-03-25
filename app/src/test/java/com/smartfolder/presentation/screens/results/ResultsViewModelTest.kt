@@ -13,6 +13,7 @@ import com.smartfolder.domain.repository.FolderRepository
 import com.smartfolder.domain.repository.SettingsRepository
 import com.smartfolder.domain.repository.SuggestionRepository
 import com.smartfolder.domain.usecase.AcceptSuggestionUseCase
+import com.smartfolder.domain.usecase.BuildManualSuggestionsUseCase
 import com.smartfolder.domain.usecase.GetSuggestionsUseCase
 import com.smartfolder.domain.usecase.LoadSuggestionsUseCase
 import com.smartfolder.domain.usecase.MoveImagesUseCase
@@ -43,6 +44,7 @@ class ResultsViewModelTest {
     private lateinit var rejectSuggestionUseCase: RejectSuggestionUseCase
     private lateinit var folderRepository: FolderRepository
     private lateinit var embeddingRepository: EmbeddingRepository
+    private lateinit var buildManualSuggestionsUseCase: BuildManualSuggestionsUseCase
     private lateinit var loadSuggestionsUseCase: LoadSuggestionsUseCase
     private lateinit var suggestionRepository: SuggestionRepository
     private lateinit var settingsRepository: FakeSettingsRepository
@@ -85,6 +87,7 @@ class ResultsViewModelTest {
         rejectSuggestionUseCase = mock(RejectSuggestionUseCase::class.java)
         folderRepository = mock(FolderRepository::class.java)
         embeddingRepository = mock(EmbeddingRepository::class.java)
+        buildManualSuggestionsUseCase = mock(BuildManualSuggestionsUseCase::class.java)
         loadSuggestionsUseCase = mock(LoadSuggestionsUseCase::class.java)
         suggestionRepository = mock(SuggestionRepository::class.java)
         settingsRepository = FakeSettingsRepository(
@@ -97,39 +100,41 @@ class ResultsViewModelTest {
     fun `manual mode keeps every loaded suggestion visible`() = runTest(mainDispatcherRule.dispatcher) {
         val viewModel = createViewModel()
 
-        advanceUntilIdle()
-
-        val state = viewModel.uiState.value
+        val state = awaitState(viewModel) {
+            it.manualMode &&
+                it.allSuggestions.size == 4 &&
+                it.filteredSuggestions.size == 4 &&
+                !it.isComputingManualVisualGroups
+        }
         assertTrue(state.manualMode)
         assertEquals(4, state.allSuggestions.size)
         assertEquals(4, state.filteredSuggestions.size)
         assertEquals(listOf(3L, 4L, 2L, 1L), state.filteredSuggestions.map { it.image.id })
-        assertEquals(1, state.manualBatchCount)
     }
 
     @Test
     fun `manual mode supports toggle select all and clear`() = runTest(mainDispatcherRule.dispatcher) {
         val viewModel = createViewModel()
 
-        advanceUntilIdle()
+        awaitState(viewModel) { it.filteredSuggestions.size == 4 && !it.isComputingManualVisualGroups }
         viewModel.toggleSelection(1L)
         advanceUntilIdle()
         assertEquals(setOf(1L), viewModel.uiState.value.selectedIds)
 
         viewModel.selectAllFiltered()
-        advanceUntilIdle()
-        assertEquals(setOf(1L, 2L, 3L, 4L), viewModel.uiState.value.selectedIds)
+        val fullySelectedState = awaitState(viewModel) { it.selectedIds.size == 4 }
+        assertEquals(setOf(1L, 2L, 3L, 4L), fullySelectedState.selectedIds)
 
         viewModel.clearSelection()
-        advanceUntilIdle()
-        assertTrue(viewModel.uiState.value.selectedIds.isEmpty())
+        val clearedState = awaitState(viewModel) { it.selectedIds.isEmpty() }
+        assertTrue(clearedState.selectedIds.isEmpty())
     }
 
     @Test
     fun `manual mode returns uris for selected images`() = runTest(mainDispatcherRule.dispatcher) {
         val viewModel = createViewModel()
 
-        advanceUntilIdle()
+        awaitState(viewModel) { it.filteredSuggestions.size == 4 && !it.isComputingManualVisualGroups }
         viewModel.toggleSelection(2L)
 
         val uris = viewModel.getAcceptedImageUris()
@@ -138,28 +143,15 @@ class ResultsViewModelTest {
     }
 
     @Test
-    fun `manual mode can filter anime style name groups`() = runTest(mainDispatcherRule.dispatcher) {
-        val viewModel = createViewModel()
-
-        advanceUntilIdle()
-        viewModel.setManualFilter(ManualReviewFilter.NAME_GROUPS)
-        advanceUntilIdle()
-
-        val state = viewModel.uiState.value
-        assertEquals(listOf(3L, 4L), state.filteredSuggestions.map { it.image.id })
-        assertEquals(1, state.manualNameGroupCount)
-    }
-
-    @Test
     fun `manual mode can filter duplicate groups`() = runTest(mainDispatcherRule.dispatcher) {
         val viewModel = createViewModel()
 
-        advanceUntilIdle()
+        awaitState(viewModel) { it.filteredSuggestions.size == 4 && !it.isComputingManualVisualGroups }
         viewModel.setManualFilter(ManualReviewFilter.DUPLICATES)
         viewModel.setManualSort(ManualReviewSort.DUPLICATES)
-        advanceUntilIdle()
-
-        val state = viewModel.uiState.value
+        val state = awaitState(viewModel) {
+            it.filteredSuggestions.map { suggestion -> suggestion.image.id }.toSet() == setOf(1L, 2L)
+        }
         assertEquals(setOf(1L, 2L), state.filteredSuggestions.map { it.image.id }.toSet())
         assertEquals(1, state.manualVisibleDuplicateGroupCount)
     }
@@ -168,12 +160,12 @@ class ResultsViewModelTest {
     fun `manual mode can filter visual groups when embeddings are similar`() = runTest(mainDispatcherRule.dispatcher) {
         val viewModel = createViewModel()
 
-        advanceUntilIdle()
+        awaitState(viewModel) { it.filteredSuggestions.size == 4 && !it.isComputingManualVisualGroups }
         viewModel.setManualFilter(ManualReviewFilter.VISUAL_GROUPS)
         viewModel.setManualSort(ManualReviewSort.VISUAL_GROUPS)
-        advanceUntilIdle()
-
-        val state = viewModel.uiState.value
+        val state = awaitState(viewModel) {
+            it.filteredSuggestions.map { suggestion -> suggestion.image.id }.toSet() == setOf(3L, 4L)
+        }
         assertEquals(setOf(3L, 4L), state.filteredSuggestions.map { it.image.id }.toSet())
         assertEquals(1, state.manualVisibleVisualGroupCount)
     }
@@ -182,14 +174,12 @@ class ResultsViewModelTest {
     fun `manual mode can pick best image per visible duplicate group`() = runTest(mainDispatcherRule.dispatcher) {
         val viewModel = createViewModel()
 
-        advanceUntilIdle()
+        awaitState(viewModel) { it.filteredSuggestions.size == 4 && !it.isComputingManualVisualGroups }
         viewModel.setManualFilter(ManualReviewFilter.DUPLICATES)
         viewModel.setManualSort(ManualReviewSort.DUPLICATES)
-        advanceUntilIdle()
+        awaitState(viewModel) { it.filteredSuggestions.size == 2 }
         viewModel.selectBestInVisibleDuplicateGroups()
-        advanceUntilIdle()
-
-        val state = viewModel.uiState.value
+        val state = awaitState(viewModel) { it.selectedIds == setOf(2L) }
         assertEquals(setOf(2L), state.selectedIds)
     }
 
@@ -197,14 +187,12 @@ class ResultsViewModelTest {
     fun `manual mode can pick best image per visible visual group`() = runTest(mainDispatcherRule.dispatcher) {
         val viewModel = createViewModel()
 
-        advanceUntilIdle()
+        awaitState(viewModel) { it.filteredSuggestions.size == 4 && !it.isComputingManualVisualGroups }
         viewModel.setManualFilter(ManualReviewFilter.VISUAL_GROUPS)
         viewModel.setManualSort(ManualReviewSort.VISUAL_GROUPS)
-        advanceUntilIdle()
+        awaitState(viewModel) { it.filteredSuggestions.size == 2 }
         viewModel.selectBestInVisibleVisualGroups()
-        advanceUntilIdle()
-
-        val state = viewModel.uiState.value
+        val state = awaitState(viewModel) { it.selectedIds == setOf(3L) }
         assertEquals(setOf(3L), state.selectedIds)
     }
 
@@ -212,47 +200,19 @@ class ResultsViewModelTest {
     fun `manual mode trims section selection to current filter`() = runTest(mainDispatcherRule.dispatcher) {
         val viewModel = createViewModel()
 
-        advanceUntilIdle()
+        awaitState(viewModel) { it.filteredSuggestions.size == 4 && !it.isComputingManualVisualGroups }
         viewModel.toggleSelection(1L)
         advanceUntilIdle()
         viewModel.setManualQuery("raiden")
-        advanceUntilIdle()
-
-        val state = viewModel.uiState.value
+        val state = awaitState(viewModel) {
+            it.filteredSuggestions.map { suggestion -> suggestion.image.id }.toSet() == setOf(3L, 4L)
+        }
         assertEquals(setOf(3L, 4L), state.filteredSuggestions.map { it.image.id }.toSet())
         assertTrue(state.selectedIds.isEmpty())
     }
 
     @Test
-    fun `manual mode can pick best image per visible name group`() = runTest(mainDispatcherRule.dispatcher) {
-        val viewModel = createViewModel()
-
-        advanceUntilIdle()
-        viewModel.setManualFilter(ManualReviewFilter.NAME_GROUPS)
-        advanceUntilIdle()
-        viewModel.selectBestInVisibleNameGroups()
-        advanceUntilIdle()
-
-        val state = viewModel.uiState.value
-        assertEquals(setOf(3L), state.selectedIds)
-        assertEquals(1, state.manualVisibleNameGroupCount)
-    }
-
-    @Test
-    fun `manual mode can pick batch leads from visible results`() = runTest(mainDispatcherRule.dispatcher) {
-        val viewModel = createViewModel()
-
-        advanceUntilIdle()
-        viewModel.selectVisibleBatchLeads()
-        advanceUntilIdle()
-
-        val state = viewModel.uiState.value
-        assertEquals(setOf(3L), state.selectedIds)
-        assertEquals(1, state.manualVisibleBatchCount)
-    }
-
-    @Test
-    fun `manual mode can move an explicit batch to reference folder`() = runTest(mainDispatcherRule.dispatcher) {
+    fun `manual mode can move an explicit visual selection to reference folder`() = runTest(mainDispatcherRule.dispatcher) {
         val viewModel = createViewModel()
         val destinationUri = mock(Uri::class.java)
         val referenceFolder = Folder(
@@ -272,13 +232,69 @@ class ResultsViewModelTest {
             )
         )
 
-        advanceUntilIdle()
+        awaitState(viewModel) { it.filteredSuggestions.size == 4 && !it.isComputingManualVisualGroups }
         viewModel.moveImagesToReference(setOf(3L, 4L))
-        advanceUntilIdle()
-
-        val state = viewModel.uiState.value
+        val state = awaitState(viewModel) { it.allSuggestions.map { suggestion -> suggestion.image.id }.toSet() == setOf(1L, 2L) }
         assertEquals(setOf(1L, 2L), state.allSuggestions.map { it.image.id }.toSet())
         assertEquals("Moved to A: 2", state.moveResultMessage)
+    }
+
+    @Test
+    fun `manual mode rebuilds suggestions when stored cache is empty`() = runTest(mainDispatcherRule.dispatcher) {
+        val unsortedFolder = Folder(
+            id = 55L,
+            uri = mock(Uri::class.java),
+            displayName = "Unsorted",
+            role = FolderRole.UNSORTED
+        )
+        `when`(loadSuggestionsUseCase.invoke()).thenReturn(emptyList())
+        `when`(folderRepository.getByRole(FolderRole.UNSORTED)).thenReturn(listOf(unsortedFolder))
+        `when`(buildManualSuggestionsUseCase.invoke(unsortedFolder)).thenReturn(allSuggestions)
+        `when`(getSuggestionsUseCase.invoke(emptyList(), 0.80f)).thenReturn(emptyList())
+        `when`(embeddingRepository.getByImageIds(listOf(1L, 2L, 3L, 4L))).thenReturn(
+            listOf(
+                embedding(1L, floatArrayOf(1f, 0f, 0f)),
+                embedding(2L, floatArrayOf(0f, 1f, 0f)),
+                embedding(3L, floatArrayOf(0f, 0f, 1f)),
+                embedding(4L, floatArrayOf(0f, 0.1f, 0.995f))
+            )
+        )
+
+        val viewModel = ResultsViewModel(
+            getSuggestionsUseCase = getSuggestionsUseCase,
+            moveImagesUseCase = moveImagesUseCase,
+            acceptSuggestionUseCase = acceptSuggestionUseCase,
+            rejectSuggestionUseCase = rejectSuggestionUseCase,
+            folderRepository = folderRepository,
+            embeddingRepository = embeddingRepository,
+            settingsRepository = settingsRepository,
+            buildManualSuggestionsUseCase = buildManualSuggestionsUseCase,
+            loadSuggestionsUseCase = loadSuggestionsUseCase,
+            suggestionRepository = suggestionRepository
+        )
+
+        val state = awaitState(viewModel) {
+            it.filteredSuggestions.size == 4 && !it.isComputingManualVisualGroups
+        }
+        assertEquals(4, state.allSuggestions.size)
+        assertEquals(4, state.filteredSuggestions.size)
+    }
+
+    private suspend fun awaitState(
+        viewModel: ResultsViewModel,
+        predicate: (ResultsUiState) -> Boolean
+    ): ResultsUiState {
+        repeat(100) {
+            mainDispatcherRule.dispatcher.scheduler.advanceUntilIdle()
+            val state = viewModel.uiState.value
+            if (predicate(state)) {
+                Thread.sleep(50)
+                mainDispatcherRule.dispatcher.scheduler.advanceUntilIdle()
+                return state
+            }
+            Thread.sleep(10)
+        }
+        throw AssertionError("Timed out waiting for state. Current state: ${viewModel.uiState.value}")
     }
 
     private suspend fun createViewModel(): ResultsViewModel {
@@ -300,6 +316,7 @@ class ResultsViewModelTest {
             folderRepository = folderRepository,
             embeddingRepository = embeddingRepository,
             settingsRepository = settingsRepository,
+            buildManualSuggestionsUseCase = buildManualSuggestionsUseCase,
             loadSuggestionsUseCase = loadSuggestionsUseCase,
             suggestionRepository = suggestionRepository
         )
