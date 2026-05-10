@@ -74,10 +74,6 @@ class IndexFolderUseCase @Inject constructor(
 
             // List image files from folder (uses fast ContentResolver query)
             val imageFiles = listImageFiles(folder)
-            if (imageFiles.isEmpty()) {
-                emit(IndexingProgress(phase = IndexingPhase.COMPLETE, total = 0))
-                return@flow
-            }
 
             // Register images in database using batch operations
             registerImagesBatch(folder, imageFiles)
@@ -85,13 +81,26 @@ class IndexFolderUseCase @Inject constructor(
             // Reload images from DB to get IDs
             val dbImages = imageRepository.getByFolder(folder.id)
             val total = dbImages.size
+            if (total == 0) {
+                folderRepository.update(
+                    folder.copy(
+                        indexedCount = 0,
+                        imageCount = 0,
+                        lastIndexedAt = System.currentTimeMillis()
+                    )
+                )
+                emit(IndexingProgress(phase = IndexingPhase.COMPLETE, total = 0))
+                return@flow
+            }
 
             emit(IndexingProgress(phase = IndexingPhase.EMBEDDING, total = total))
 
             // Batch-fetch existing embeddings to avoid N+1 queries
             val allImageIds = dbImages.map { it.id }
             val existingEmbeddings = embeddingRepository.getByImageIds(allImageIds)
-            val embeddingsByImageId = existingEmbeddings.associateBy { it.imageId }
+            val embeddingsByImageId = existingEmbeddings
+                .filter { it.modelName == modelChoice.modelFileName }
+                .associateBy { it.imageId }
 
             val cpuCount = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
             val parallelism = resolveIndexParallelism(executionProfile, cpuCount)
@@ -261,7 +270,7 @@ class IndexFolderUseCase @Inject constructor(
                     } else if (existingImage.contentHash != image.contentHash) {
                         // Content changed: update image and invalidate embedding
                         imageRepository.update(image.copy(id = existingImage.id))
-                        embeddingRepository.getByImageId(existingImage.id)?.let {
+                        embeddingRepository.getByImageIds(listOf(existingImage.id)).forEach {
                             embeddingRepository.delete(it)
                         }
                     }

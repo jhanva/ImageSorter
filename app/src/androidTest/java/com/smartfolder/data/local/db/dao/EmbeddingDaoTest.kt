@@ -109,6 +109,21 @@ class EmbeddingDaoTest {
     }
 
     @Test
+    fun sameImageCanStoreEmbeddingsForMultipleModels() = runTest {
+        embeddingDao.insert(
+            EmbeddingEntity(imageId = imageId1, vectorBlob = createVectorBlob(1f), modelName = "fast")
+        )
+        embeddingDao.insert(
+            EmbeddingEntity(imageId = imageId1, vectorBlob = createVectorBlob(0f), modelName = "precise")
+        )
+
+        val allForImage = embeddingDao.getByImageIds(listOf(imageId1))
+        assertEquals(2, allForImage.size)
+        assertEquals(1, embeddingDao.getByFolderAndModel(folderId, "fast").size)
+        assertEquals(1, embeddingDao.getByFolderAndModel(folderId, "precise").size)
+    }
+
+    @Test
     fun countByFolderAndModel() = runTest {
         embeddingDao.insert(
             EmbeddingEntity(imageId = imageId1, vectorBlob = createVectorBlob(1f), modelName = "fast")

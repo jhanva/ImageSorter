@@ -90,6 +90,8 @@ fun HomeScreen(
     }
 
     fun openFolderPicker(role: FolderSelectRole) {
+        // This app intentionally does not launch ACTION_OPEN_DOCUMENT_TREE.
+        // Folder selection is constrained to MediaStore-discoverable image folders.
         pendingRole = role
         if (!hasImagePermission()) {
             requestImagePermission()

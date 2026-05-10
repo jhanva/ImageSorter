@@ -148,7 +148,7 @@ class SafManager @Inject constructor(
             }
         } catch (e: Exception) {
             throw IllegalStateException(
-                "Failed to list images from selected folder. In Secure Folder you may need to grant folder access via system picker.",
+                "Failed to list images from the selected folder. This app can only work with image folders exposed through MediaStore and the generated folder URI.",
                 e
             )
         }

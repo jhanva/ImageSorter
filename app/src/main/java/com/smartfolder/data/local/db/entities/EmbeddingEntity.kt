@@ -16,7 +16,7 @@ import androidx.room.PrimaryKey
         )
     ],
     indices = [
-        Index("imageId", unique = true),
+        Index(value = ["imageId", "modelName"], unique = true),
         Index("modelName")
     ]
 )

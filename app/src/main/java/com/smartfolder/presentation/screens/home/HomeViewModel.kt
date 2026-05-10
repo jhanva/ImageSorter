@@ -14,6 +14,7 @@ import com.smartfolder.domain.repository.SettingsRepository
 import com.smartfolder.domain.usecase.IndexFolderUseCase
 import com.smartfolder.domain.usecase.SelectFolderUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,6 +35,7 @@ class HomeViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+    private var canAnalyzeJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -53,44 +55,27 @@ class HomeViewModel @Inject constructor(
                 updateCanAnalyze()
             }
         }
-        loadExistingFolders()
+        observeFolders()
         refreshAvailableImageFolders()
     }
 
-    private fun loadExistingFolders() {
+    private fun observeFolders() {
         viewModelScope.launch {
-            val refFolders = folderRepository.getByRole(FolderRole.REFERENCE)
-            val unsortedFolders = folderRepository.getByRole(FolderRole.UNSORTED)
+            folderRepository.observeAll().collect { folders ->
+                val refFolder = folders
+                    .filter { it.role == FolderRole.REFERENCE }
+                    .maxByOrNull { it.id }
+                val unsortedFolder = folders
+                    .filter { it.role == FolderRole.UNSORTED }
+                    .maxByOrNull { it.id }
 
-            val refFolder = refFolders.maxByOrNull { it.id }
-            val unsortedFolder = unsortedFolders.maxByOrNull { it.id }
-
-            // Check if SAF permissions are still valid
-            val refPermissionLost = refFolder != null &&
-                    !safManager.hasPersistedPermission(refFolder.uri)
-            val unsortedPermissionLost = unsortedFolder != null &&
-                    !safManager.hasPersistedPermission(unsortedFolder.uri)
-
-            _uiState.value = _uiState.value.copy(
-                referenceFolder = if (refPermissionLost) null else refFolder,
-                unsortedFolder = if (unsortedPermissionLost) null else unsortedFolder,
-                canAnalyze = false,
-                error = when {
-                    refPermissionLost && unsortedPermissionLost ->
-                        "Access to both folders was revoked. Please re-select them."
-                    refPermissionLost ->
-                        "Access to reference folder was revoked. Please re-select it."
-                    unsortedPermissionLost ->
-                        "Access to unsorted folder was revoked. Please re-select it."
-                    else -> null
-                }
-            )
-
-            // Clean up folders with lost permissions
-            if (refPermissionLost && refFolder != null) folderRepository.delete(refFolder)
-            if (unsortedPermissionLost && unsortedFolder != null) folderRepository.delete(unsortedFolder)
+                _uiState.value = _uiState.value.copy(
+                    referenceFolder = refFolder,
+                    unsortedFolder = unsortedFolder
+                )
+                updateCanAnalyze()
+            }
         }
-        updateCanAnalyze()
     }
 
     fun selectReferenceFolder(uri: Uri) {
@@ -197,12 +182,13 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun updateCanAnalyze() {
+        canAnalyzeJob?.cancel()
         val unsorted = _uiState.value.unsortedFolder
         if (unsorted == null) {
             _uiState.value = _uiState.value.copy(canAnalyze = false)
             return
         }
-        viewModelScope.launch {
+        canAnalyzeJob = viewModelScope.launch {
             if (_uiState.value.manualMode) {
                 _uiState.value = _uiState.value.copy(canAnalyze = true)
                 return@launch

@@ -76,7 +76,7 @@ Presentation  (Jetpack Compose + ViewModels + StateFlow)
 
 ### Key Design Decisions
 
-- **SAF-only file access** -- No dangerous permissions. Uses `ACTION_OPEN_DOCUMENT_TREE` with persistable URI permissions.
+- **MediaStore-driven folder selection** -- The app cannot use `ACTION_OPEN_DOCUMENT_TREE` as its primary folder selection flow. It enumerates image folders from MediaStore, lets the user choose from that indexed list, and then builds the folder URI used by downstream file operations.
 - **ContentResolver queries** -- Folder listing uses `DocumentsContract` queries instead of `DocumentFile.listFiles()` for 10-100x faster enumeration of large folders.
 - **MediaStore-first listing for folder analysis/indexing** -- Uses `documentId`-based MediaStore lookup first, with SAF fallback for compatibility.
 - **GPU with CPU fallback** -- MediaPipe attempts GPU delegate first, falls back to CPU automatically.
@@ -102,7 +102,7 @@ app/src/main/java/com/smartfolder/
   ml/                            ML pipeline (embedder, similarity, centroid)
   worker/                        WorkManager workers
   presentation/
-    MainActivity.kt              Entry point + SAF launcher
+    MainActivity.kt              Entry point
     navigation/                  NavGraph + Screen routes
     theme/                       Material 3 theme
     components/                  Reusable Compose components
@@ -183,6 +183,7 @@ Available in the Settings screen:
 Notes:
 - In manual mode, folder B opens in assisted offline review instead of scored suggestions.
 - Threshold only affects model mode.
+- Folder selection is limited to image folders discoverable through MediaStore. The app does not expose the system document tree picker.
 
 ## Requirements
 

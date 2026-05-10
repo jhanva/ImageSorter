@@ -5,7 +5,7 @@ import com.smartfolder.data.local.db.entities.EmbeddingEntity
 
 @Dao
 interface EmbeddingDao {
-    @Query("SELECT * FROM embeddings WHERE imageId = :imageId")
+    @Query("SELECT * FROM embeddings WHERE imageId = :imageId ORDER BY createdAt DESC, id DESC LIMIT 1")
     suspend fun getByImageId(imageId: Long): EmbeddingEntity?
 
     @Query("SELECT * FROM embeddings WHERE imageId IN (:imageIds)")

@@ -78,6 +78,38 @@ object DatabaseModule {
         }
     }
 
+    val MIGRATION_4_5: Migration = object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `embeddings_new` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `imageId` INTEGER NOT NULL,
+                    `vectorBlob` BLOB NOT NULL,
+                    `modelName` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    FOREIGN KEY(`imageId`) REFERENCES `images`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO `embeddings_new` (`id`, `imageId`, `vectorBlob`, `modelName`, `createdAt`)
+                SELECT e.`id`, e.`imageId`, e.`vectorBlob`, e.`modelName`, e.`createdAt`
+                FROM `embeddings` e
+                """.trimIndent()
+            )
+            db.execSQL("DROP TABLE `embeddings`")
+            db.execSQL("ALTER TABLE `embeddings_new` RENAME TO `embeddings`")
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_embeddings_imageId_modelName` ON `embeddings` (`imageId`, `modelName`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_embeddings_modelName` ON `embeddings` (`modelName`)"
+            )
+        }
+    }
+
     @Provides
     @Singleton
     fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
@@ -88,6 +120,7 @@ object DatabaseModule {
         )
             .addMigrations(MIGRATION_2_3)
             .addMigrations(MIGRATION_3_4)
+            .addMigrations(MIGRATION_4_5)
             .build()
     }
 
