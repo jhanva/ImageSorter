@@ -1,6 +1,10 @@
 package com.smartfolder.ml
 
 object SimilarityCalculator {
+    private const val CENTROID_WEIGHT = 0.20f
+    private const val TOP_K_MEAN_WEIGHT = 0.25f
+    private const val TOP_K_MAX_WEIGHT = 0.20f
+    private const val REFERENCE_SUPPORT_WEIGHT = 0.35f
 
     /**
      * Dot product similarity for L2-normalized vectors.
@@ -35,7 +39,25 @@ object SimilarityCalculator {
         return if (denominator == 0f) 0f else dot / denominator
     }
 
-    fun computeScore(centroidScore: Float, topKMean: Float, topKMax: Float): Float {
-        return 0.2f * centroidScore + 0.3f * topKMean + 0.5f * topKMax
+    /**
+     * Measures how much the best match is backed up by other strong references.
+     * For character and series folders, this helps reject one-off stylistic matches.
+     */
+    fun computeReferenceSupport(sortedTopScores: List<Float>): Float {
+        if (sortedTopScores.isEmpty()) return 0f
+        if (sortedTopScores.size == 1) return sortedTopScores.first()
+        return sortedTopScores.drop(1).average().toFloat()
+    }
+
+    fun computeScore(
+        centroidScore: Float,
+        topKMean: Float,
+        topKMax: Float,
+        referenceSupport: Float
+    ): Float {
+        return (CENTROID_WEIGHT * centroidScore) +
+            (TOP_K_MEAN_WEIGHT * topKMean) +
+            (TOP_K_MAX_WEIGHT * topKMax) +
+            (REFERENCE_SUPPORT_WEIGHT * referenceSupport)
     }
 }

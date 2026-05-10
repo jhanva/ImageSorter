@@ -139,7 +139,15 @@ class AnalyzeImagesUseCase @Inject constructor(
                             } else {
                                 0f
                             }
-                            val combinedScore = SimilarityCalculator.computeScore(centroidScore, topKScore, topKMax)
+                            val referenceSupport = SimilarityCalculator.computeReferenceSupport(
+                                topKSimilarities.map { it.second }
+                            )
+                            val combinedScore = SimilarityCalculator.computeScore(
+                                centroidScore = centroidScore,
+                                topKMean = topKScore,
+                                topKMax = topKMax,
+                                referenceSupport = referenceSupport
+                            )
                             if (combinedScore < threshold) continue
 
                             localCandidates.add(

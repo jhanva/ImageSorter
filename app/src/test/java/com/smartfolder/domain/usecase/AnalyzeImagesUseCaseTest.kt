@@ -137,4 +137,54 @@ class AnalyzeImagesUseCaseTest {
         assertEquals(AnalysisPhase.COMPLETE, lastResult.progress.phase)
         assertTrue(lastResult.suggestions.isEmpty())
     }
+
+    @Test
+    fun `requires support from multiple references for anime style matches`() = runTest {
+        val refOne = Embedding(1L, 1L, normalized(1f, 0f, 0f), ModelChoice.FAST.modelFileName)
+        val refTwo = Embedding(2L, 2L, normalized(1f, 1f, 0f), ModelChoice.FAST.modelFileName)
+        val refThree = Embedding(3L, 3L, normalized(1f, 0f, 1f), ModelChoice.FAST.modelFileName)
+        val supportedCandidate = Embedding(
+            4L,
+            4L,
+            normalized(2.4142f, 0.7071f, 0.7071f),
+            ModelChoice.FAST.modelFileName
+        )
+        val oneOffCandidate = Embedding(5L, 5L, normalized(1f, 0f, 0f), ModelChoice.FAST.modelFileName)
+
+        val refImageOne = ImageInfo(1L, 1L, mock(Uri::class.java), "rei-a.png", "hash-1", 1000L, 100L)
+        val refImageTwo = ImageInfo(2L, 1L, mock(Uri::class.java), "rei-b.png", "hash-2", 1000L, 100L)
+        val refImageThree = ImageInfo(3L, 1L, mock(Uri::class.java), "rei-c.png", "hash-3", 1000L, 100L)
+        val supportedImage = ImageInfo(4L, 2L, mock(Uri::class.java), "candidate-supported.png", "hash-4", 1000L, 100L)
+        val oneOffImage = ImageInfo(5L, 2L, mock(Uri::class.java), "candidate-one-off.png", "hash-5", 1000L, 100L)
+
+        runBlocking {
+            `when`(embeddingRepository.getByFolderAndModel(1L, ModelChoice.FAST.modelFileName))
+                .thenReturn(listOf(refOne, refTwo, refThree))
+            `when`(embeddingRepository.getByFolderAndModel(2L, ModelChoice.FAST.modelFileName))
+                .thenReturn(listOf(supportedCandidate, oneOffCandidate))
+            doAnswer {
+                val ids = it.getArgument<List<Long>>(0)
+                listOf(refImageOne, refImageTwo, refImageThree, supportedImage, oneOffImage)
+                    .filter { image -> image.id in ids }
+            }.`when`(imageRepository).getByIds(anyList())
+        }
+
+        val results = useCase(
+            referenceFolder = refFolder,
+            unsortedFolder = unsortedFolder,
+            modelChoice = ModelChoice.FAST,
+            threshold = 0.87f,
+            topK = 3
+        ).toList()
+        val lastResult = results.last()
+
+        assertEquals(AnalysisPhase.COMPLETE, lastResult.progress.phase)
+        assertEquals(1, lastResult.suggestions.size)
+        assertEquals(4L, lastResult.suggestions.single().image.id)
+    }
+
+    private fun normalized(vararg values: Float): FloatArray {
+        val norm = kotlin.math.sqrt(values.sumOf { (it * it).toDouble() }).toFloat()
+        return FloatArray(values.size) { index -> values[index] / norm }
+    }
 }

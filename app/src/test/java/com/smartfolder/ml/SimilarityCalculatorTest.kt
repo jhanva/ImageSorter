@@ -63,32 +63,77 @@ class SimilarityCalculatorTest {
         assertEquals(0f, SimilarityCalculator.cosineSimilarityFull(a, b), 0.0001f)
     }
 
+    // -- computeReferenceSupport --
+
+    @Test
+    fun `computeReferenceSupport uses supporting matches after the best hit`() {
+        val support = SimilarityCalculator.computeReferenceSupport(listOf(0.95f, 0.86f, 0.84f))
+
+        assertEquals(0.85f, support, 0.0001f)
+    }
+
+    @Test
+    fun `computeReferenceSupport falls back to best hit when only one reference exists`() {
+        val support = SimilarityCalculator.computeReferenceSupport(listOf(0.91f))
+
+        assertEquals(0.91f, support, 0.0001f)
+    }
+
     // -- computeScore --
 
     @Test
-    fun `computeScore uses correct weights`() {
+    fun `computeScore uses consensus aware weights`() {
         val centroidScore = 0.8f
         val topKMean = 0.7f
         val topKMax = 0.9f
-        val expected = 0.2f * centroidScore + 0.3f * topKMean + 0.5f * topKMax
-        assertEquals(expected, SimilarityCalculator.computeScore(centroidScore, topKMean, topKMax), 0.0001f)
+        val referenceSupport = 0.6f
+        val expected =
+            0.2f * centroidScore + 0.25f * topKMean + 0.2f * topKMax + 0.35f * referenceSupport
+        assertEquals(
+            expected,
+            SimilarityCalculator.computeScore(
+                centroidScore = centroidScore,
+                topKMean = topKMean,
+                topKMax = topKMax,
+                referenceSupport = referenceSupport
+            ),
+            0.0001f
+        )
     }
 
     @Test
     fun `computeScore with zero scores returns 0`() {
-        assertEquals(0f, SimilarityCalculator.computeScore(0f, 0f, 0f), 0.0001f)
+        assertEquals(
+            0f,
+            SimilarityCalculator.computeScore(0f, 0f, 0f, 0f),
+            0.0001f
+        )
     }
 
     @Test
     fun `computeScore with perfect scores returns 1`() {
-        assertEquals(1f, SimilarityCalculator.computeScore(1f, 1f, 1f), 0.0001f)
+        assertEquals(
+            1f,
+            SimilarityCalculator.computeScore(1f, 1f, 1f, 1f),
+            0.0001f
+        )
     }
 
     @Test
-    fun `computeScore prioritizes topKMax over centroid`() {
-        // High max similarity should produce higher score than high centroid
-        val highMax = SimilarityCalculator.computeScore(0.3f, 0.5f, 0.9f)
-        val highCentroid = SimilarityCalculator.computeScore(0.9f, 0.5f, 0.3f)
-        assertTrue(highMax > highCentroid)
+    fun `computeScore rewards reference consensus over a single spiky match`() {
+        val strongConsensus = SimilarityCalculator.computeScore(
+            centroidScore = 0.92f,
+            topKMean = 0.87f,
+            topKMax = 0.93f,
+            referenceSupport = 0.85f
+        )
+        val oneOffHit = SimilarityCalculator.computeScore(
+            centroidScore = 0.92f,
+            topKMean = 0.80f,
+            topKMax = 0.99f,
+            referenceSupport = 0.65f
+        )
+
+        assertTrue(strongConsensus > oneOffHit)
     }
 }
