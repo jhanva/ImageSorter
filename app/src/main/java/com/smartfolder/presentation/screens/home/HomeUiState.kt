@@ -7,15 +7,14 @@ import com.smartfolder.domain.model.IndexingProgress
 import com.smartfolder.domain.model.ModelChoice
 
 data class HomeUiState(
-    val referenceFolder: Folder? = null,
-    val unsortedFolder: Folder? = null,
+    val destinationFolders: List<Folder> = emptyList(),
+    val sourceFolders: List<Folder> = emptyList(),
     val modelChoice: ModelChoice = ModelChoice.FAST,
-    val manualMode: Boolean = false,
     val executionProfile: ExecutionProfile = ExecutionProfile.BALANCED,
-    val refIndexingProgress: IndexingProgress = IndexingProgress(),
-    val unsortedIndexingProgress: IndexingProgress = IndexingProgress(),
-    val isIndexingRef: Boolean = false,
-    val isIndexingUnsorted: Boolean = false,
+    val destinationIndexingProgress: IndexingProgress = IndexingProgress(),
+    val sourceIndexingProgress: IndexingProgress = IndexingProgress(),
+    val isIndexingDestinations: Boolean = false,
+    val isIndexingSources: Boolean = false,
     val availableImageFolders: List<ImageFolderOption> = emptyList(),
     val isLoadingImageFolders: Boolean = false,
     val canAnalyze: Boolean = false,

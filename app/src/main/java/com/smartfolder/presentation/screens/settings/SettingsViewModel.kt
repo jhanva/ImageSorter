@@ -43,11 +43,6 @@ class SettingsViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(darkMode = darkMode)
             }
         }
-        viewModelScope.launch {
-            settingsRepository.manualMode.collect { manualMode ->
-                _uiState.value = _uiState.value.copy(manualMode = manualMode)
-            }
-        }
     }
 
     fun setThreshold(value: Float) {
@@ -71,12 +66,6 @@ class SettingsViewModel @Inject constructor(
     fun setDarkMode(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setDarkMode(enabled)
-        }
-    }
-
-    fun setManualMode(enabled: Boolean) {
-        viewModelScope.launch {
-            settingsRepository.setManualMode(enabled)
         }
     }
 

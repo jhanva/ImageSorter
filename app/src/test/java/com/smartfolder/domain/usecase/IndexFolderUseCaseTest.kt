@@ -66,7 +66,7 @@ class IndexFolderUseCaseTest {
 
     @Test
     fun `empty folder completes immediately`() = runTest {
-        val folder = Folder(1L, mockUri, "Empty", FolderRole.REFERENCE)
+        val folder = Folder(1L, mockUri, "Empty", FolderRole.DESTINATION)
         `when`(safManager.listImageFiles(mockUri, true)).thenReturn(emptyList())
         `when`(imageRepository.getByFolder(1L)).thenReturn(emptyList())
 
@@ -84,7 +84,7 @@ class IndexFolderUseCaseTest {
             id = 1L,
             uri = mockUri,
             displayName = "Empty",
-            role = FolderRole.REFERENCE,
+            role = FolderRole.DESTINATION,
             imageCount = 3,
             indexedCount = 3
         )
@@ -125,7 +125,7 @@ class IndexFolderUseCaseTest {
 
     @Test
     fun `folder with images goes through correct phases`() = runTest {
-        val folder = Folder(1L, mockUri, "Test", FolderRole.REFERENCE)
+        val folder = Folder(1L, mockUri, "Test", FolderRole.DESTINATION)
         val imageUri = uri("content://test/image.jpg")
         val imageFiles = listOf(
             SafImageFile(imageUri, "test.jpg", 1000L, 100L, "image/jpeg")
@@ -159,7 +159,7 @@ class IndexFolderUseCaseTest {
 
     @Test
     fun `stale images are removed from db during indexing`() = runTest {
-        val folder = Folder(1L, mockUri, "Test", FolderRole.REFERENCE)
+        val folder = Folder(1L, mockUri, "Test", FolderRole.DESTINATION)
 
         val currentUri = uri("content://test/image.jpg")
         val staleUri = uri("content://test/old.jpg")
@@ -204,7 +204,7 @@ class IndexFolderUseCaseTest {
 
     @Test
     fun `indexing one model does not delete cached embeddings from another model`() = runTest {
-        val folder = Folder(1L, mockUri, "Test", FolderRole.REFERENCE)
+        val folder = Folder(1L, mockUri, "Test", FolderRole.DESTINATION)
         val imageUri = uri("content://test/image.jpg")
         val bitmap = mock(Bitmap::class.java)
 

@@ -8,7 +8,7 @@ data class FolderEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val uri: String,
     val displayName: String,
-    val role: String, // "REFERENCE" or "UNSORTED"
+    val role: String, // "DESTINATION" or "SOURCE"
     val imageCount: Int = 0,
     val indexedCount: Int = 0,
     val lastIndexedAt: Long? = null

@@ -1,52 +1,24 @@
 package com.smartfolder.presentation.screens.results
 
+import com.smartfolder.domain.model.Folder
 import com.smartfolder.domain.model.SuggestionItem
+
+data class DestinationSuggestionSection(
+    val destination: Folder,
+    val suggestions: List<SuggestionItem>
+)
 
 data class ResultsUiState(
     val allSuggestions: List<SuggestionItem> = emptyList(),
     val filteredSuggestions: List<SuggestionItem> = emptyList(),
-    val isDebugTopFallback: Boolean = false,
+    val destinationFolders: List<Folder> = emptyList(),
+    val destinationSections: List<DestinationSuggestionSection> = emptyList(),
     val threshold: Float = 0.80f,
-    val manualMode: Boolean = false,
-    val manualQuery: String = "",
-    val manualFilter: ManualReviewFilter = ManualReviewFilter.ALL,
-    val manualSort: ManualReviewSort = ManualReviewSort.VISUAL_GROUPS,
-    val manualSections: List<ManualReviewSection> = emptyList(),
-    val manualGridEntries: List<ManualReviewGridEntry> = emptyList(),
-    val isComputingManualVisualGroups: Boolean = false,
-    val manualDuplicateGroupCount: Int = 0,
-    val manualVisualGroupCount: Int = 0,
-    val manualBatchCount: Int = 0,
-    val manualLargeFileCount: Int = 0,
-    val manualVisibleDuplicateGroupCount: Int = 0,
-    val manualVisibleVisualGroupCount: Int = 0,
-    val manualVisibleBatchCount: Int = 0,
     val selectedIds: Set<Long> = emptySet(),
-    // Review mode: one-by-one image review
-    val isReviewing: Boolean = false,
-    val currentReviewIndex: Int = 0,
-    val acceptedIds: Set<Long> = emptySet(),
-    val skippedIds: Set<Long> = emptySet(),
-    val reviewComplete: Boolean = false,
-    // Move
+    val destinationOverrides: Map<Long, Long> = emptyMap(),
     val isMoving: Boolean = false,
     val moveResultMessage: String? = null,
     val error: String? = null
 ) {
-    val currentSuggestion: SuggestionItem?
-        get() = filteredSuggestions.getOrNull(currentReviewIndex)
-
-    val reviewProgress: String
-        get() = if (filteredSuggestions.isNotEmpty()) {
-            "${currentReviewIndex + 1} / ${filteredSuggestions.size}"
-        } else ""
-
-    val visibleSuggestionCount: Int get() = filteredSuggestions.size
     val selectedCount: Int get() = selectedIds.size
-    val acceptedCount: Int get() = acceptedIds.size
-    val skippedCount: Int get() = skippedIds.size
-    val moveCandidateIds: Set<Long>
-        get() = if (manualMode) selectedIds else acceptedIds
-    val moveCandidateCount: Int
-        get() = moveCandidateIds.size
 }

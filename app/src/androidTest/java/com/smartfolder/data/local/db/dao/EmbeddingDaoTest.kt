@@ -41,7 +41,7 @@ class EmbeddingDaoTest {
         embeddingDao = database.embeddingDao()
 
         folderId = folderDao.insert(
-            FolderEntity(uri = "content://folder", displayName = "Test", role = "REFERENCE")
+            FolderEntity(uri = "content://folder", displayName = "Test", role = "DESTINATION")
         )
         imageId1 = imageDao.insert(
             ImageEntity(folderId = folderId, uri = "img1", displayName = "img1.jpg",
@@ -67,7 +67,7 @@ class EmbeddingDaoTest {
     @Test
     fun insertAndRetrieveEmbedding() = runTest {
         val blob = createVectorBlob(1f, 0f, 0f)
-        val id = embeddingDao.insert(
+        embeddingDao.insert(
             EmbeddingEntity(imageId = imageId1, vectorBlob = blob, modelName = "fast")
         )
 

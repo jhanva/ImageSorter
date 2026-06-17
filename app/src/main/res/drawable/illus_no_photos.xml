@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <!-- soft brand backdrop -->
+    <path
+        android:fillColor="#C2F0EE"
+        android:pathData="M22,100 a78,78 0 1,1 156,0 a78,78 0 1,1 -156,0 z" />
+    <!-- photo card -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M65,66 h70 a10,10 0 0 1 10,10 v48 a10,10 0 0 1 -10,10 h-70 a10,10 0 0 1 -10,-10 v-48 a10,10 0 0 1 10,-10 z" />
+    <!-- sun -->
+    <path
+        android:fillColor="#F6BC5F"
+        android:pathData="M80,86 a8,8 0 1,1 16,0 a8,8 0 1,1 -16,0 z" />
+    <!-- mountains -->
+    <path
+        android:fillColor="#4A5B92"
+        android:pathData="M60,130 L86,100 L104,120 L120,104 L140,130 z" />
+</vector>

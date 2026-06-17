@@ -29,7 +29,9 @@ class SuggestionRepositoryImpl @Inject constructor(
 
     private fun SuggestionEntity.toDomain(): StoredSuggestion = StoredSuggestion(
         imageId = imageId,
+        destinationFolderId = destinationFolderId,
         score = score,
+        secondBestScore = secondBestScore,
         centroidScore = centroidScore,
         topKScore = topKScore,
         topSimilarIds = parseLongList(topSimilarIds),
@@ -39,7 +41,9 @@ class SuggestionRepositoryImpl @Inject constructor(
 
     private fun StoredSuggestion.toEntity(): SuggestionEntity = SuggestionEntity(
         imageId = imageId,
+        destinationFolderId = destinationFolderId,
         score = score,
+        secondBestScore = secondBestScore,
         centroidScore = centroidScore,
         topKScore = topKScore,
         topSimilarIds = topSimilarIds.joinToString(","),

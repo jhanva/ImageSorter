@@ -11,7 +11,9 @@ import androidx.room.PrimaryKey
 data class SuggestionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val imageId: Long,
+    val destinationFolderId: Long,
     val score: Float,
+    val secondBestScore: Float,
     val centroidScore: Float,
     val topKScore: Float,
     val topSimilarIds: String,

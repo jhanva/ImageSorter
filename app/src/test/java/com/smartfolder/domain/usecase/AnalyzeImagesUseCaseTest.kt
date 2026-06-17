@@ -11,8 +11,8 @@ import com.smartfolder.domain.model.StoredSuggestion
 import com.smartfolder.domain.repository.EmbeddingRepository
 import com.smartfolder.domain.repository.ImageRepository
 import com.smartfolder.domain.repository.SuggestionRepository
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -32,18 +32,32 @@ class AnalyzeImagesUseCaseTest {
     private lateinit var useCase: AnalyzeImagesUseCase
     private var capturedSuggestions: List<StoredSuggestion>? = null
 
-    private val refFolder = Folder(
+    private val destinationA = Folder(
         id = 1L,
         uri = mock(Uri::class.java),
-        displayName = "Reference",
-        role = FolderRole.REFERENCE
+        displayName = "Dest A",
+        role = FolderRole.DESTINATION
     )
 
-    private val unsortedFolder = Folder(
+    private val destinationB = Folder(
         id = 2L,
         uri = mock(Uri::class.java),
-        displayName = "Unsorted",
-        role = FolderRole.UNSORTED
+        displayName = "Dest B",
+        role = FolderRole.DESTINATION
+    )
+
+    private val sourceA = Folder(
+        id = 10L,
+        uri = mock(Uri::class.java),
+        displayName = "Source A",
+        role = FolderRole.SOURCE
+    )
+
+    private val sourceB = Folder(
+        id = 11L,
+        uri = mock(Uri::class.java),
+        displayName = "Source B",
+        role = FolderRole.SOURCE
     )
 
     @Before
@@ -64,123 +78,188 @@ class AnalyzeImagesUseCaseTest {
     }
 
     @Test
-    fun `empty reference embeddings returns error`() = runTest {
+    fun `empty destination embeddings returns error`() = runTest {
         `when`(embeddingRepository.getByFolderAndModel(1L, ModelChoice.FAST.modelFileName))
             .thenReturn(emptyList())
+        `when`(embeddingRepository.getByFolderAndModel(2L, ModelChoice.FAST.modelFileName))
+            .thenReturn(emptyList())
 
-        val results = useCase(refFolder, unsortedFolder, ModelChoice.FAST, 0.8f).toList()
+        val results = useCase(
+            destinationFolders = listOf(destinationA, destinationB),
+            sourceFolders = listOf(sourceA),
+            modelChoice = ModelChoice.FAST,
+            threshold = 0.8f
+        ).toList()
+
         val lastResult = results.last()
-
         assertEquals(AnalysisPhase.ERROR, lastResult.progress.phase)
         assertTrue(lastResult.suggestions.isEmpty())
         verify(suggestionRepository).deleteAll()
     }
 
     @Test
-    fun `empty unsorted embeddings returns error`() = runTest {
-        val refEmbedding = Embedding(
+    fun `empty source embeddings returns error`() = runTest {
+        val destinationEmbedding = Embedding(
             id = 1L,
-            imageId = 1L,
-            vector = floatArrayOf(1f, 0f, 0f),
+            imageId = 101L,
+            vector = normalized(1f, 0f, 0f),
             modelName = ModelChoice.FAST.modelFileName
         )
         `when`(embeddingRepository.getByFolderAndModel(1L, ModelChoice.FAST.modelFileName))
-            .thenReturn(listOf(refEmbedding))
+            .thenReturn(listOf(destinationEmbedding))
         `when`(embeddingRepository.getByFolderAndModel(2L, ModelChoice.FAST.modelFileName))
             .thenReturn(emptyList())
-
-        val results = useCase(refFolder, unsortedFolder, ModelChoice.FAST, 0.8f).toList()
-        val lastResult = results.last()
-
-        assertEquals(AnalysisPhase.ERROR, lastResult.progress.phase)
-    }
-
-    @Test
-    fun `identical vectors produce high score suggestions`() = runTest {
-        val vector = floatArrayOf(1f, 0f, 0f)
-        val refEmbedding = Embedding(1L, 1L, vector, ModelChoice.FAST.modelFileName)
-        val unsortedEmbedding = Embedding(2L, 2L, vector, ModelChoice.FAST.modelFileName)
-
-        val refImage = ImageInfo(1L, 1L, mock(Uri::class.java), "ref.jpg", "hash1", 1000L, 100L)
-        val unsortedImage = ImageInfo(2L, 2L, mock(Uri::class.java), "unsorted.jpg", "hash2", 1000L, 100L)
-
-        `when`(embeddingRepository.getByFolderAndModel(1L, ModelChoice.FAST.modelFileName))
-            .thenReturn(listOf(refEmbedding))
-        `when`(embeddingRepository.getByFolderAndModel(2L, ModelChoice.FAST.modelFileName))
-            .thenReturn(listOf(unsortedEmbedding))
-        `when`(imageRepository.getByIds(listOf(2L, 1L))).thenReturn(listOf(unsortedImage, refImage))
-
-        val results = useCase(refFolder, unsortedFolder, ModelChoice.FAST, 0.5f).toList()
-        val lastResult = results.last()
-
-        assertEquals(AnalysisPhase.COMPLETE, lastResult.progress.phase)
-        assertEquals(1, lastResult.suggestions.size)
-        assertEquals(1f, lastResult.suggestions[0].score, 0.01f)
-        assertEquals(1, capturedSuggestions?.size)
-    }
-
-    @Test
-    fun `orthogonal vectors produce no suggestions at high threshold`() = runTest {
-        val refVector = floatArrayOf(1f, 0f, 0f)
-        val unsortedVector = floatArrayOf(0f, 1f, 0f)
-        val refEmbedding = Embedding(1L, 1L, refVector, ModelChoice.FAST.modelFileName)
-        val unsortedEmbedding = Embedding(2L, 2L, unsortedVector, ModelChoice.FAST.modelFileName)
-
-        `when`(embeddingRepository.getByFolderAndModel(1L, ModelChoice.FAST.modelFileName))
-            .thenReturn(listOf(refEmbedding))
-        `when`(embeddingRepository.getByFolderAndModel(2L, ModelChoice.FAST.modelFileName))
-            .thenReturn(listOf(unsortedEmbedding))
-
-        val results = useCase(refFolder, unsortedFolder, ModelChoice.FAST, 0.8f).toList()
-        val lastResult = results.last()
-
-        assertEquals(AnalysisPhase.COMPLETE, lastResult.progress.phase)
-        assertTrue(lastResult.suggestions.isEmpty())
-    }
-
-    @Test
-    fun `requires support from multiple references for anime style matches`() = runTest {
-        val refOne = Embedding(1L, 1L, normalized(1f, 0f, 0f), ModelChoice.FAST.modelFileName)
-        val refTwo = Embedding(2L, 2L, normalized(1f, 1f, 0f), ModelChoice.FAST.modelFileName)
-        val refThree = Embedding(3L, 3L, normalized(1f, 0f, 1f), ModelChoice.FAST.modelFileName)
-        val supportedCandidate = Embedding(
-            4L,
-            4L,
-            normalized(2.4142f, 0.7071f, 0.7071f),
-            ModelChoice.FAST.modelFileName
-        )
-        val oneOffCandidate = Embedding(5L, 5L, normalized(1f, 0f, 0f), ModelChoice.FAST.modelFileName)
-
-        val refImageOne = ImageInfo(1L, 1L, mock(Uri::class.java), "rei-a.png", "hash-1", 1000L, 100L)
-        val refImageTwo = ImageInfo(2L, 1L, mock(Uri::class.java), "rei-b.png", "hash-2", 1000L, 100L)
-        val refImageThree = ImageInfo(3L, 1L, mock(Uri::class.java), "rei-c.png", "hash-3", 1000L, 100L)
-        val supportedImage = ImageInfo(4L, 2L, mock(Uri::class.java), "candidate-supported.png", "hash-4", 1000L, 100L)
-        val oneOffImage = ImageInfo(5L, 2L, mock(Uri::class.java), "candidate-one-off.png", "hash-5", 1000L, 100L)
-
-        runBlocking {
-            `when`(embeddingRepository.getByFolderAndModel(1L, ModelChoice.FAST.modelFileName))
-                .thenReturn(listOf(refOne, refTwo, refThree))
-            `when`(embeddingRepository.getByFolderAndModel(2L, ModelChoice.FAST.modelFileName))
-                .thenReturn(listOf(supportedCandidate, oneOffCandidate))
-            doAnswer {
-                val ids = it.getArgument<List<Long>>(0)
-                listOf(refImageOne, refImageTwo, refImageThree, supportedImage, oneOffImage)
-                    .filter { image -> image.id in ids }
-            }.`when`(imageRepository).getByIds(anyList())
-        }
+        `when`(embeddingRepository.getByFolderAndModel(10L, ModelChoice.FAST.modelFileName))
+            .thenReturn(emptyList())
 
         val results = useCase(
-            referenceFolder = refFolder,
-            unsortedFolder = unsortedFolder,
+            destinationFolders = listOf(destinationA, destinationB),
+            sourceFolders = listOf(sourceA),
             modelChoice = ModelChoice.FAST,
-            threshold = 0.87f,
-            topK = 3
+            threshold = 0.8f
         ).toList()
-        val lastResult = results.last()
 
+        assertEquals(AnalysisPhase.ERROR, results.last().progress.phase)
+    }
+
+    @Test
+    fun `missing embeddings for any selected destination folder returns error instead of partial analysis`() = runTest {
+        val destinationEmbedding = Embedding(
+            id = 1L,
+            imageId = 101L,
+            vector = normalized(1f, 0f, 0f),
+            modelName = ModelChoice.FAST.modelFileName
+        )
+        val sourceEmbedding = Embedding(
+            id = 2L,
+            imageId = 301L,
+            vector = normalized(1f, 0f, 0f),
+            modelName = ModelChoice.FAST.modelFileName
+        )
+
+        `when`(embeddingRepository.getByFolderAndModel(destinationA.id, ModelChoice.FAST.modelFileName))
+            .thenReturn(listOf(destinationEmbedding))
+        `when`(embeddingRepository.getByFolderAndModel(destinationB.id, ModelChoice.FAST.modelFileName))
+            .thenReturn(emptyList())
+        `when`(embeddingRepository.getByFolderAndModel(sourceA.id, ModelChoice.FAST.modelFileName))
+            .thenReturn(listOf(sourceEmbedding))
+
+        val results = useCase(
+            destinationFolders = listOf(destinationA, destinationB),
+            sourceFolders = listOf(sourceA),
+            modelChoice = ModelChoice.FAST,
+            threshold = 0.8f
+        ).toList()
+
+        assertEquals(AnalysisPhase.ERROR, results.last().progress.phase)
+    }
+
+    @Test
+    fun `chooses best destination across multiple destination folders`() = runTest {
+        val destinationVectorA = normalized(1f, 0f, 0f)
+        val destinationVectorB = normalized(0f, 1f, 0f)
+        val sourceVectorA = normalized(0.95f, 0.05f, 0f)
+        val sourceVectorB = normalized(0.1f, 0.9f, 0f)
+
+        val destinationEmbeddingA = Embedding(1L, 101L, destinationVectorA, ModelChoice.FAST.modelFileName)
+        val destinationEmbeddingB = Embedding(2L, 201L, destinationVectorB, ModelChoice.FAST.modelFileName)
+        val sourceEmbeddingA = Embedding(3L, 301L, sourceVectorA, ModelChoice.FAST.modelFileName)
+        val sourceEmbeddingB = Embedding(4L, 302L, sourceVectorB, ModelChoice.FAST.modelFileName)
+
+        val imageById = listOf(
+            ImageInfo(101L, destinationA.id, mock(Uri::class.java), "dest-a-1.png", "hash-101", 1000L, 100L),
+            ImageInfo(201L, destinationB.id, mock(Uri::class.java), "dest-b-1.png", "hash-201", 1000L, 100L),
+            ImageInfo(301L, sourceA.id, mock(Uri::class.java), "source-a.png", "hash-301", 1000L, 100L),
+            ImageInfo(302L, sourceB.id, mock(Uri::class.java), "source-b.png", "hash-302", 1000L, 100L)
+        )
+
+        `when`(embeddingRepository.getByFolderAndModel(destinationA.id, ModelChoice.FAST.modelFileName))
+            .thenReturn(listOf(destinationEmbeddingA))
+        `when`(embeddingRepository.getByFolderAndModel(destinationB.id, ModelChoice.FAST.modelFileName))
+            .thenReturn(listOf(destinationEmbeddingB))
+        `when`(embeddingRepository.getByFolderAndModel(sourceA.id, ModelChoice.FAST.modelFileName))
+            .thenReturn(listOf(sourceEmbeddingA))
+        `when`(embeddingRepository.getByFolderAndModel(sourceB.id, ModelChoice.FAST.modelFileName))
+            .thenReturn(listOf(sourceEmbeddingB))
+        doAnswer {
+            val ids = it.getArgument<List<Long>>(0)
+            imageById.filter { image -> image.id in ids }
+        }.`when`(imageRepository).getByIds(anyList())
+
+        val results = useCase(
+            destinationFolders = listOf(destinationA, destinationB),
+            sourceFolders = listOf(sourceA, sourceB),
+            modelChoice = ModelChoice.FAST,
+            threshold = 0.5f
+        ).toList()
+
+        val lastResult = results.last()
         assertEquals(AnalysisPhase.COMPLETE, lastResult.progress.phase)
-        assertEquals(1, lastResult.suggestions.size)
-        assertEquals(4L, lastResult.suggestions.single().image.id)
+        assertEquals(2, lastResult.suggestions.size)
+        assertEquals(destinationA.id, lastResult.suggestions.first { it.image.id == 301L }.suggestedDestinationId)
+        assertEquals(destinationB.id, lastResult.suggestions.first { it.image.id == 302L }.suggestedDestinationId)
+        assertEquals(2, capturedSuggestions?.size)
+    }
+
+    @Test
+    fun `stores second best score for ambiguity handling`() = runTest {
+        val destinationVectorA = normalized(1f, 0f, 0f)
+        val destinationVectorB = normalized(0.8f, 0.2f, 0f)
+        val sourceVector = normalized(0.9f, 0.1f, 0f)
+
+        `when`(embeddingRepository.getByFolderAndModel(destinationA.id, ModelChoice.FAST.modelFileName))
+            .thenReturn(listOf(Embedding(1L, 101L, destinationVectorA, ModelChoice.FAST.modelFileName)))
+        `when`(embeddingRepository.getByFolderAndModel(destinationB.id, ModelChoice.FAST.modelFileName))
+            .thenReturn(listOf(Embedding(2L, 201L, destinationVectorB, ModelChoice.FAST.modelFileName)))
+        `when`(embeddingRepository.getByFolderAndModel(sourceA.id, ModelChoice.FAST.modelFileName))
+            .thenReturn(listOf(Embedding(3L, 301L, sourceVector, ModelChoice.FAST.modelFileName)))
+        doAnswer {
+            val ids = it.getArgument<List<Long>>(0)
+            listOf(
+                ImageInfo(101L, destinationA.id, mock(Uri::class.java), "dest-a.png", "hash-101", 1000L, 100L),
+                ImageInfo(201L, destinationB.id, mock(Uri::class.java), "dest-b.png", "hash-201", 1000L, 100L),
+                ImageInfo(301L, sourceA.id, mock(Uri::class.java), "source.png", "hash-301", 1000L, 100L)
+            ).filter { image -> image.id in ids }
+        }.`when`(imageRepository).getByIds(anyList())
+
+        val results = useCase(
+            destinationFolders = listOf(destinationA, destinationB),
+            sourceFolders = listOf(sourceA),
+            modelChoice = ModelChoice.FAST,
+            threshold = 0.5f
+        ).toList()
+
+        val suggestion = results.last().suggestions.single()
+        assertTrue(suggestion.secondBestScore > 0f)
+        assertTrue(suggestion.score >= suggestion.secondBestScore)
+    }
+
+    @Test
+    fun `keeps low confidence images as unassigned instead of dropping them`() = runTest {
+        val destinationVector = normalized(1f, 0f, 0f)
+        val sourceVector = normalized(0f, 1f, 0f)
+
+        `when`(embeddingRepository.getByFolderAndModel(destinationA.id, ModelChoice.FAST.modelFileName))
+            .thenReturn(listOf(Embedding(1L, 101L, destinationVector, ModelChoice.FAST.modelFileName)))
+        `when`(embeddingRepository.getByFolderAndModel(sourceA.id, ModelChoice.FAST.modelFileName))
+            .thenReturn(listOf(Embedding(2L, 301L, sourceVector, ModelChoice.FAST.modelFileName)))
+        doAnswer {
+            val ids = it.getArgument<List<Long>>(0)
+            listOf(
+                ImageInfo(101L, destinationA.id, mock(Uri::class.java), "dest-a.png", "hash-101", 1000L, 100L),
+                ImageInfo(301L, sourceA.id, mock(Uri::class.java), "source.png", "hash-301", 1000L, 100L)
+            ).filter { image -> image.id in ids }
+        }.`when`(imageRepository).getByIds(anyList())
+
+        val results = useCase(
+            destinationFolders = listOf(destinationA),
+            sourceFolders = listOf(sourceA),
+            modelChoice = ModelChoice.FAST,
+            threshold = 0.9f
+        ).toList()
+
+        val suggestion = results.last().suggestions.single()
+        assertEquals(0L, suggestion.suggestedDestinationId)
     }
 
     private fun normalized(vararg values: Float): FloatArray {

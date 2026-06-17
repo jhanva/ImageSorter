@@ -40,7 +40,7 @@ class FolderDaoTest {
         val folder = FolderEntity(
             uri = "content://test/folder",
             displayName = "Test Folder",
-            role = "REFERENCE",
+            role = "DESTINATION",
             imageCount = 10
         )
         val id = folderDao.insert(folder)
@@ -48,14 +48,14 @@ class FolderDaoTest {
 
         assertNotNull(retrieved)
         assertEquals("Test Folder", retrieved?.displayName)
-        assertEquals("REFERENCE", retrieved?.role)
+        assertEquals("DESTINATION", retrieved?.role)
         assertEquals(10, retrieved?.imageCount)
     }
 
     @Test
     fun observeAllReturnsInsertedFolders() = runTest {
-        folderDao.insert(FolderEntity(uri = "uri1", displayName = "A", role = "REFERENCE"))
-        folderDao.insert(FolderEntity(uri = "uri2", displayName = "B", role = "UNSORTED"))
+        folderDao.insert(FolderEntity(uri = "uri1", displayName = "A", role = "DESTINATION"))
+        folderDao.insert(FolderEntity(uri = "uri2", displayName = "B", role = "SOURCE"))
 
         val folders = folderDao.observeAll().first()
         assertEquals(2, folders.size)
@@ -63,21 +63,21 @@ class FolderDaoTest {
 
     @Test
     fun getByRoleFiltersCorrectly() = runTest {
-        folderDao.insert(FolderEntity(uri = "uri1", displayName = "Ref", role = "REFERENCE"))
-        folderDao.insert(FolderEntity(uri = "uri2", displayName = "Unsorted", role = "UNSORTED"))
+        folderDao.insert(FolderEntity(uri = "uri1", displayName = "Dest", role = "DESTINATION"))
+        folderDao.insert(FolderEntity(uri = "uri2", displayName = "Source", role = "SOURCE"))
 
-        val refFolders = folderDao.getByRole("REFERENCE")
-        assertEquals(1, refFolders.size)
-        assertEquals("Ref", refFolders[0].displayName)
+        val destinationFolders = folderDao.getByRole("DESTINATION")
+        assertEquals(1, destinationFolders.size)
+        assertEquals("Dest", destinationFolders[0].displayName)
 
-        val unsortedFolders = folderDao.getByRole("UNSORTED")
-        assertEquals(1, unsortedFolders.size)
-        assertEquals("Unsorted", unsortedFolders[0].displayName)
+        val sourceFolders = folderDao.getByRole("SOURCE")
+        assertEquals(1, sourceFolders.size)
+        assertEquals("Source", sourceFolders[0].displayName)
     }
 
     @Test
     fun getByUriReturnsCorrectFolder() = runTest {
-        folderDao.insert(FolderEntity(uri = "content://test/unique", displayName = "Unique", role = "REFERENCE"))
+        folderDao.insert(FolderEntity(uri = "content://test/unique", displayName = "Unique", role = "DESTINATION"))
 
         val found = folderDao.getByUri("content://test/unique")
         assertNotNull(found)
@@ -89,7 +89,7 @@ class FolderDaoTest {
 
     @Test
     fun updateModifiesFolder() = runTest {
-        val id = folderDao.insert(FolderEntity(uri = "uri", displayName = "Old", role = "REFERENCE"))
+        val id = folderDao.insert(FolderEntity(uri = "uri", displayName = "Old", role = "DESTINATION"))
         val folder = folderDao.getById(id)!!
         folderDao.update(folder.copy(displayName = "New", imageCount = 20))
 
@@ -100,7 +100,7 @@ class FolderDaoTest {
 
     @Test
     fun deleteRemovesFolder() = runTest {
-        val id = folderDao.insert(FolderEntity(uri = "uri", displayName = "ToDelete", role = "REFERENCE"))
+        val id = folderDao.insert(FolderEntity(uri = "uri", displayName = "ToDelete", role = "DESTINATION"))
         val folder = folderDao.getById(id)!!
         folderDao.delete(folder)
 
@@ -109,8 +109,8 @@ class FolderDaoTest {
 
     @Test
     fun deleteAllClearsTable() = runTest {
-        folderDao.insert(FolderEntity(uri = "uri1", displayName = "A", role = "REFERENCE"))
-        folderDao.insert(FolderEntity(uri = "uri2", displayName = "B", role = "UNSORTED"))
+        folderDao.insert(FolderEntity(uri = "uri1", displayName = "A", role = "DESTINATION"))
+        folderDao.insert(FolderEntity(uri = "uri2", displayName = "B", role = "SOURCE"))
 
         folderDao.deleteAll()
         val all = folderDao.observeAll().first()

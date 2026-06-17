@@ -31,7 +31,9 @@ class LoadSuggestionsUseCaseTest {
         val stored = listOf(
             StoredSuggestion(
                 imageId = 10L,
+                destinationFolderId = 1L,
                 score = 0.9f,
+                secondBestScore = 0.7f,
                 centroidScore = 0.8f,
                 topKScore = 0.95f,
                 topSimilarIds = listOf(1L, 2L),
@@ -51,8 +53,9 @@ class LoadSuggestionsUseCaseTest {
 
         assertEquals(1, results.size)
         assertEquals(10L, results[0].image.id)
-        assertEquals(2, results[0].topSimilarFromA.size)
-        assertEquals(0.98f, results[0].topSimilarFromA[0].score, 0.0001f)
+        assertEquals(1L, results[0].suggestedDestinationId)
+        assertEquals(2, results[0].topSimilarImages.size)
+        assertEquals(0.98f, results[0].topSimilarImages[0].score, 0.0001f)
     }
 
     @Test
@@ -60,7 +63,9 @@ class LoadSuggestionsUseCaseTest {
         val stored = listOf(
             StoredSuggestion(
                 imageId = 99L,
+                destinationFolderId = 1L,
                 score = 0.9f,
+                secondBestScore = 0.7f,
                 centroidScore = 0.8f,
                 topKScore = 0.95f,
                 topSimilarIds = listOf(1L),

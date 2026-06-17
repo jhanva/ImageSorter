@@ -31,10 +31,12 @@ class LoadSuggestionsUseCase @Inject constructor(
                 }
             SuggestionItem(
                 image = image,
+                suggestedDestinationId = suggestion.destinationFolderId,
                 score = suggestion.score,
+                secondBestScore = suggestion.secondBestScore,
                 centroidScore = suggestion.centroidScore,
                 topKScore = suggestion.topKScore,
-                topSimilarFromA = matches
+                topSimilarImages = matches
             )
         }
     }

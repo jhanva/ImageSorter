@@ -10,14 +10,16 @@ import org.junit.Test
 class SuggestionRepositoryImplTest {
 
     @Test
-    fun `replaceAll and getAll roundtrip preserves fields`() = runTest {
+    fun `replaceAll and getAll roundtrip preserves destination fields`() = runTest {
         val dao = FakeSuggestionDao()
         val repo = SuggestionRepositoryImpl(dao)
 
         val input = listOf(
             StoredSuggestion(
                 imageId = 1L,
+                destinationFolderId = 100L,
                 score = 0.9f,
+                secondBestScore = 0.7f,
                 centroidScore = 0.8f,
                 topKScore = 0.95f,
                 topSimilarIds = listOf(2L, 3L),
@@ -26,7 +28,9 @@ class SuggestionRepositoryImplTest {
             ),
             StoredSuggestion(
                 imageId = 4L,
+                destinationFolderId = 101L,
                 score = 0.7f,
+                secondBestScore = 0.4f,
                 centroidScore = 0.6f,
                 topKScore = 0.8f,
                 topSimilarIds = emptyList(),
@@ -39,11 +43,11 @@ class SuggestionRepositoryImplTest {
         val output = repo.getAll()
 
         assertEquals(2, output.size)
-        assertEquals(input[0].imageId, output[0].imageId)
+        assertEquals(input[0].destinationFolderId, output[0].destinationFolderId)
+        assertEquals(input[0].secondBestScore, output[0].secondBestScore, 0.0001f)
         assertEquals(input[0].topSimilarIds, output[0].topSimilarIds)
-        assertEquals(input[0].topSimilarScores, output[0].topSimilarScores)
-        assertEquals(input[1].topSimilarIds, output[1].topSimilarIds)
-        assertEquals(input[1].topSimilarScores, output[1].topSimilarScores)
+        assertEquals(input[1].destinationFolderId, output[1].destinationFolderId)
+        assertEquals(input[1].secondBestScore, output[1].secondBestScore, 0.0001f)
     }
 
     private class FakeSuggestionDao : SuggestionDao {

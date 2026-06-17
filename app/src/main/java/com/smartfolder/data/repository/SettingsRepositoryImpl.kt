@@ -21,8 +21,6 @@ class SettingsRepositoryImpl @Inject constructor(
 
     override val darkMode: Flow<Boolean> = settingsDataStore.darkMode
 
-    override val manualMode: Flow<Boolean> = settingsDataStore.manualMode
-
     override suspend fun setThreshold(value: Float) {
         settingsDataStore.setThreshold(value)
     }
@@ -37,9 +35,5 @@ class SettingsRepositoryImpl @Inject constructor(
 
     override suspend fun setDarkMode(enabled: Boolean) {
         settingsDataStore.setDarkMode(enabled)
-    }
-
-    override suspend fun setManualMode(enabled: Boolean) {
-        settingsDataStore.setManualMode(enabled)
     }
 }

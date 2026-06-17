@@ -147,31 +147,6 @@ fun SettingsScreen(
                 )
             }
 
-            // Assisted mode
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Assisted Mode",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Text(
-                        text = "Open folder B in offline assisted review with local visual grouping and batch move instead of reference scoring",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Switch(
-                    checked = uiState.manualMode,
-                    onCheckedChange = { viewModel.setManualMode(it) }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
             // Clear cache
             Button(
                 onClick = { showClearConfirmation = true },

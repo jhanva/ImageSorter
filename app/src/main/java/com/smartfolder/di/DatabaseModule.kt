@@ -110,6 +110,63 @@ object DatabaseModule {
         }
     }
 
+    val MIGRATION_5_6: Migration = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("UPDATE folders SET role = 'DESTINATION' WHERE role = 'REFERENCE'")
+            db.execSQL("UPDATE folders SET role = 'SOURCE' WHERE role = 'UNSORTED'")
+
+            db.execSQL("ALTER TABLE suggestions RENAME TO suggestions_old")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `suggestions` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `imageId` INTEGER NOT NULL,
+                    `destinationFolderId` INTEGER NOT NULL,
+                    `score` REAL NOT NULL,
+                    `secondBestScore` REAL NOT NULL,
+                    `centroidScore` REAL NOT NULL,
+                    `topKScore` REAL NOT NULL,
+                    `topSimilarIds` TEXT NOT NULL,
+                    `topSimilarScores` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO `suggestions` (
+                    `id`,
+                    `imageId`,
+                    `destinationFolderId`,
+                    `score`,
+                    `secondBestScore`,
+                    `centroidScore`,
+                    `topKScore`,
+                    `topSimilarIds`,
+                    `topSimilarScores`,
+                    `createdAt`
+                )
+                SELECT
+                    `id`,
+                    `imageId`,
+                    0,
+                    `score`,
+                    0.0,
+                    `centroidScore`,
+                    `topKScore`,
+                    `topSimilarIds`,
+                    `topSimilarScores`,
+                    `createdAt`
+                FROM `suggestions_old`
+                """.trimIndent()
+            )
+            db.execSQL("DROP TABLE `suggestions_old`")
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_suggestions_imageId` ON `suggestions` (`imageId`)"
+            )
+        }
+    }
+
     @Provides
     @Singleton
     fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
@@ -121,6 +178,7 @@ object DatabaseModule {
             .addMigrations(MIGRATION_2_3)
             .addMigrations(MIGRATION_3_4)
             .addMigrations(MIGRATION_4_5)
+            .addMigrations(MIGRATION_5_6)
             .build()
     }
 

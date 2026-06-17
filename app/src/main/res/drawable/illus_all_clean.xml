@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <!-- soft brand backdrop -->
+    <path
+        android:fillColor="#C2F0EE"
+        android:pathData="M22,100 a78,78 0 1,1 156,0 a78,78 0 1,1 -156,0 z" />
+    <!-- checkmark -->
+    <path
+        android:pathData="M66,102 L90,128 L138,74"
+        android:strokeColor="#006A6B"
+        android:strokeWidth="14"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <!-- sparkles -->
+    <path
+        android:fillColor="#4A5B92"
+        android:pathData="M152,42 Q152,52 162,52 Q152,52 152,62 Q152,52 142,52 Q152,52 152,42 z" />
+    <path
+        android:fillColor="#4A5B92"
+        android:pathData="M46,132 Q46,138 52,138 Q46,138 46,144 Q46,138 40,138 Q46,138 46,132 z" />
+</vector>

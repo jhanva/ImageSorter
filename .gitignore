@@ -105,5 +105,14 @@ lint/tmp/
 ehthumbs.db
 Thumbs.db
 
+# Local linked skills
+/skills
+/.agents/skills
+/.codex/agents
+/.codex/config.toml
+/.codex-build2/
+/.codex-tmp-build/
+/.codex-tmp-release/
+
 # ML model files (downloaded by Gradle task)
 app/src/main/assets/models/*.tflite

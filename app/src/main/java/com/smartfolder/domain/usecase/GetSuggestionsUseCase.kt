@@ -9,7 +9,10 @@ class GetSuggestionsUseCase @Inject constructor() {
         threshold: Float
     ): List<SuggestionItem> {
         return suggestions
-            .filter { it.score >= threshold }
-            .sortedByDescending { it.score }
+            .filter { it.suggestedDestinationId == 0L || it.score >= threshold }
+            .sortedWith(
+                compareByDescending<SuggestionItem> { it.suggestedDestinationId != 0L }
+                    .thenByDescending { it.score }
+            )
     }
 }

@@ -2,8 +2,8 @@ package com.smartfolder.domain.model
 
 enum class AnalysisPhase {
     IDLE,
-    INDEXING_REF,
-    INDEXING_UNSORTED,
+    INDEXING_DESTINATIONS,
+    INDEXING_SOURCES,
     CENTROID,
     COMPARING,
     COMPLETE,
