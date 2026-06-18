@@ -212,8 +212,6 @@ class HomeViewModelTest {
 
         override fun observeAll(): Flow<List<Folder>> = foldersFlow
 
-        override suspend fun getById(id: Long): Folder? = foldersFlow.value.firstOrNull { it.id == id }
-
         override suspend fun getByRole(role: FolderRole): List<Folder> =
             foldersFlow.value.filter { it.role == role }
 
@@ -268,8 +266,6 @@ class HomeViewModelTest {
     private class FakeEmbeddingRepository(
         private val countsByFolderAndModel: Map<Long, Map<String, Int>>
     ) : EmbeddingRepository {
-        override suspend fun getByImageId(imageId: Long) = null
-
         override suspend fun getByImageIds(imageIds: List<Long>) = emptyList<com.smartfolder.domain.model.Embedding>()
 
         override suspend fun getByFolderAndModel(folderId: Long, modelName: String) =
@@ -277,13 +273,9 @@ class HomeViewModelTest {
 
         override suspend fun insert(embedding: com.smartfolder.domain.model.Embedding): Long = 0L
 
-        override suspend fun insertAll(embeddings: List<com.smartfolder.domain.model.Embedding>) = Unit
-
         override suspend fun delete(embedding: com.smartfolder.domain.model.Embedding) = Unit
 
         override suspend fun deleteByFolder(folderId: Long) = Unit
-
-        override suspend fun deleteByOtherModel(modelName: String) = Unit
 
         override suspend fun countByFolderAndModel(folderId: Long, modelName: String): Int {
             return countsByFolderAndModel[folderId]?.get(modelName) ?: 0

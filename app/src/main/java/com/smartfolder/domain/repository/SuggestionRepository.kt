@@ -4,6 +4,7 @@ import com.smartfolder.domain.model.StoredSuggestion
 
 interface SuggestionRepository {
     suspend fun getAll(): List<StoredSuggestion>
+    suspend fun insertAll(suggestions: List<StoredSuggestion>)
     suspend fun replaceAll(suggestions: List<StoredSuggestion>)
     suspend fun deleteAll()
 }

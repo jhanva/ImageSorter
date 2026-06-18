@@ -81,8 +81,6 @@ class SelectFolderUseCaseTest {
 
         override fun observeAll(): Flow<List<Folder>> = emptyFlow()
 
-        override suspend fun getById(id: Long): Folder? = byUri.values.firstOrNull { it.id == id }
-
         override suspend fun getByRole(role: FolderRole): List<Folder> =
             byUri.values.filter { it.role == role }
 

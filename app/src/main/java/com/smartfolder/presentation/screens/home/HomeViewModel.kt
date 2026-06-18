@@ -15,10 +15,12 @@ import com.smartfolder.domain.repository.SettingsRepository
 import com.smartfolder.domain.usecase.IndexFolderUseCase
 import com.smartfolder.domain.usecase.SelectFolderUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
@@ -184,12 +186,14 @@ class HomeViewModel @Inject constructor(
     fun refreshAvailableImageFolders() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoadingImageFolders = true)
-            val folders = try {
-                mediaStoreFolderProvider.getImageFolders()
-            } catch (_: SecurityException) {
-                emptyList()
-            } catch (_: Exception) {
-                emptyList()
+            val folders = withContext(Dispatchers.IO) {
+                try {
+                    mediaStoreFolderProvider.getImageFolders()
+                } catch (_: SecurityException) {
+                    emptyList()
+                } catch (_: Exception) {
+                    emptyList()
+                }
             }
             _uiState.value = _uiState.value.copy(
                 availableImageFolders = folders,

@@ -5,8 +5,6 @@ import com.smartfolder.data.local.db.dao.ImageDao
 import com.smartfolder.data.local.db.entities.ImageEntity
 import com.smartfolder.domain.model.ImageInfo
 import com.smartfolder.domain.repository.ImageRepository
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -15,18 +13,8 @@ class ImageRepositoryImpl @Inject constructor(
     private val imageDao: ImageDao
 ) : ImageRepository {
 
-    override fun observeByFolder(folderId: Long): Flow<List<ImageInfo>> {
-        return imageDao.observeByFolder(folderId).map { entities ->
-            entities.map { it.toDomain() }
-        }
-    }
-
     override suspend fun getByFolder(folderId: Long): List<ImageInfo> {
         return imageDao.getByFolder(folderId).map { it.toDomain() }
-    }
-
-    override suspend fun getById(id: Long): ImageInfo? {
-        return imageDao.getById(id)?.toDomain()
     }
 
     override suspend fun getByIds(ids: List<Long>): List<ImageInfo> {

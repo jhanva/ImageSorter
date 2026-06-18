@@ -11,7 +11,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -71,7 +71,7 @@ class EmbeddingDaoTest {
             EmbeddingEntity(imageId = imageId1, vectorBlob = blob, modelName = "fast")
         )
 
-        val embedding = embeddingDao.getByImageId(imageId1)
+        val embedding = embeddingDao.getByImageIds(listOf(imageId1)).firstOrNull()
         assertNotNull(embedding)
         assertEquals(imageId1, embedding?.imageId)
         assertEquals("fast", embedding?.modelName)
@@ -150,23 +150,7 @@ class EmbeddingDaoTest {
 
         embeddingDao.deleteByFolder(folderId)
 
-        assertNull(embeddingDao.getByImageId(imageId1))
-        assertNull(embeddingDao.getByImageId(imageId2))
-    }
-
-    @Test
-    fun deleteByOtherModelKeepsCurrentModel() = runTest {
-        embeddingDao.insert(
-            EmbeddingEntity(imageId = imageId1, vectorBlob = createVectorBlob(1f), modelName = "fast")
-        )
-        embeddingDao.insert(
-            EmbeddingEntity(imageId = imageId2, vectorBlob = createVectorBlob(0f), modelName = "precise")
-        )
-
-        embeddingDao.deleteByOtherModel("fast")
-
-        assertNotNull(embeddingDao.getByImageId(imageId1))
-        assertNull(embeddingDao.getByImageId(imageId2))
+        assertTrue(embeddingDao.getByImageIds(listOf(imageId1, imageId2)).isEmpty())
     }
 
     @Test
@@ -175,9 +159,9 @@ class EmbeddingDaoTest {
             EmbeddingEntity(imageId = imageId1, vectorBlob = createVectorBlob(1f), modelName = "fast")
         )
 
-        val image = imageDao.getById(imageId1)!!
+        val image = imageDao.getByIds(listOf(imageId1)).first()
         imageDao.delete(image)
 
-        assertNull(embeddingDao.getByImageId(imageId1))
+        assertTrue(embeddingDao.getByImageIds(listOf(imageId1)).isEmpty())
     }
 }

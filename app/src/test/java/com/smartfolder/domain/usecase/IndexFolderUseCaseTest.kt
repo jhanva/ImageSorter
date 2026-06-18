@@ -266,8 +266,6 @@ class IndexFolderUseCaseTest {
 
         override fun observeAll(): Flow<List<Folder>> = emptyFlow()
 
-        override suspend fun getById(id: Long): Folder? = null
-
         override suspend fun getByRole(role: FolderRole): List<Folder> = emptyList()
 
         override suspend fun getByUri(uri: String): Folder? = null
@@ -289,9 +287,6 @@ class IndexFolderUseCaseTest {
         val insertedEmbeddings = mutableListOf<Embedding>()
         val deletedEmbeddings = mutableListOf<Embedding>()
 
-        override suspend fun getByImageId(imageId: Long): Embedding? =
-            existingEmbeddings.firstOrNull { it.imageId == imageId }
-
         override suspend fun getByImageIds(imageIds: List<Long>): List<Embedding> =
             existingEmbeddings.filter { it.imageId in imageIds }
 
@@ -303,17 +298,11 @@ class IndexFolderUseCaseTest {
             return embedding.id
         }
 
-        override suspend fun insertAll(embeddings: List<Embedding>) {
-            insertedEmbeddings += embeddings
-        }
-
         override suspend fun delete(embedding: Embedding) {
             deletedEmbeddings += embedding
         }
 
         override suspend fun deleteByFolder(folderId: Long) = Unit
-
-        override suspend fun deleteByOtherModel(modelName: String) = Unit
 
         override suspend fun countByFolderAndModel(folderId: Long, modelName: String): Int = 0
     }

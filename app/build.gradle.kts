@@ -85,7 +85,7 @@ android {
     }
 
     androidResources {
-        noCompress += "tflite"
+        noCompress += listOf("tflite", "onnx")
     }
 }
 
@@ -98,6 +98,11 @@ android.applicationVariants.all {
 
 val downloadModels by tasks.registering {
     val modelsDir = file("src/main/assets/models")
+    // MobileCLIP-S0 image encoder (mobileclip_s0_image.onnx) is NOT auto-downloaded.
+    // Export it from Apple's official checkpoint at https://github.com/apple/ml-mobileclip
+    // and place the ONNX file at app/src/main/assets/models/mobileclip_s0_image.onnx.
+    // If the file is missing, the "Semantic" model option will fail to initialize but the
+    // app still works with the MobileNet models.
     val models = mapOf(
         "mobilenet_v3_small.tflite" to mapOf(
             "url" to "https://storage.googleapis.com/mediapipe-models/image_embedder/mobilenet_v3_small/float32/latest/mobilenet_v3_small.tflite",
@@ -201,8 +206,11 @@ dependencies {
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
-    // MediaPipe for image embeddings
+    // MediaPipe for image embeddings (MobileNet V3)
     implementation("com.google.mediapipe:tasks-vision:0.10.9")
+
+    // ONNX Runtime for MobileCLIP-S0 semantic embeddings
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.18.0")
 
     // DocumentFile for SAF
     implementation("androidx.documentfile:documentfile:1.0.1")

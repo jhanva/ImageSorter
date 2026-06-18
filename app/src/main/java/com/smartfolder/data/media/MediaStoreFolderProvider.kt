@@ -72,10 +72,19 @@ class MediaStoreFolderProvider @Inject constructor(
     }
 
     fun getImageCountForDocumentId(documentId: String): Int {
-        return getImageFolders()
-            .firstOrNull { it.documentId == documentId }
-            ?.imageCount
-            ?: 0
+        val relativePath = documentId.substringAfter(':', "").trim('/')
+        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+        } else {
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        }
+        val (selection, selectionArgs) = buildMediaStoreSelection(relativePath, recursive = true)
+        val projection = arrayOf("COUNT(*) AS count")
+        return context.contentResolver.query(
+            collection, projection, selection, selectionArgs, null
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getInt(0) else 0
+        } ?: 0
     }
 
     fun getImageFolders(): List<ImageFolderOption> {

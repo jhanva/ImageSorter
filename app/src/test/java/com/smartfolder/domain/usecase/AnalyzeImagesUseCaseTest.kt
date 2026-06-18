@@ -12,7 +12,6 @@ import com.smartfolder.domain.repository.EmbeddingRepository
 import com.smartfolder.domain.repository.ImageRepository
 import com.smartfolder.domain.repository.SuggestionRepository
 import kotlinx.coroutines.flow.toList
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -21,6 +20,7 @@ import org.junit.Test
 import org.mockito.ArgumentMatchers.anyList
 import org.mockito.Mockito.doAnswer
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 
@@ -30,7 +30,7 @@ class AnalyzeImagesUseCaseTest {
     private lateinit var embeddingRepository: EmbeddingRepository
     private lateinit var suggestionRepository: SuggestionRepository
     private lateinit var useCase: AnalyzeImagesUseCase
-    private var capturedSuggestions: List<StoredSuggestion>? = null
+    private val storedSuggestions = mutableListOf<StoredSuggestion>()
 
     private val destinationA = Folder(
         id = 1L,
@@ -65,13 +65,22 @@ class AnalyzeImagesUseCaseTest {
         imageRepository = mock(ImageRepository::class.java)
         embeddingRepository = mock(EmbeddingRepository::class.java)
         suggestionRepository = mock(SuggestionRepository::class.java)
-        runBlocking {
+        storedSuggestions.clear()
+        kotlinx.coroutines.runBlocking {
             doAnswer { Unit }.`when`(suggestionRepository).deleteAll()
             doAnswer {
                 @Suppress("UNCHECKED_CAST")
-                capturedSuggestions = it.getArgument(0) as List<StoredSuggestion>
+                storedSuggestions.addAll(it.getArgument(0) as List<StoredSuggestion>)
+                Unit
+            }.`when`(suggestionRepository).insertAll(anyList())
+            doAnswer {
+                @Suppress("UNCHECKED_CAST")
+                val newList = it.getArgument(0) as List<StoredSuggestion>
+                storedSuggestions.clear()
+                storedSuggestions.addAll(newList)
                 Unit
             }.`when`(suggestionRepository).replaceAll(anyList())
+            doAnswer { storedSuggestions.toList() }.`when`(suggestionRepository).getAll()
             `when`(imageRepository.getByIds(emptyList())).thenReturn(emptyList())
         }
         useCase = AnalyzeImagesUseCase(imageRepository, embeddingRepository, suggestionRepository)
@@ -94,7 +103,7 @@ class AnalyzeImagesUseCaseTest {
         val lastResult = results.last()
         assertEquals(AnalysisPhase.ERROR, lastResult.progress.phase)
         assertTrue(lastResult.suggestions.isEmpty())
-        verify(suggestionRepository).deleteAll()
+        verify(suggestionRepository, never()).deleteAll()
     }
 
     @Test
@@ -107,13 +116,11 @@ class AnalyzeImagesUseCaseTest {
         )
         `when`(embeddingRepository.getByFolderAndModel(1L, ModelChoice.FAST.modelFileName))
             .thenReturn(listOf(destinationEmbedding))
-        `when`(embeddingRepository.getByFolderAndModel(2L, ModelChoice.FAST.modelFileName))
-            .thenReturn(emptyList())
-        `when`(embeddingRepository.getByFolderAndModel(10L, ModelChoice.FAST.modelFileName))
-            .thenReturn(emptyList())
+        `when`(embeddingRepository.countByFolderAndModel(10L, ModelChoice.FAST.modelFileName))
+            .thenReturn(0)
 
         val results = useCase(
-            destinationFolders = listOf(destinationA, destinationB),
+            destinationFolders = listOf(destinationA),
             sourceFolders = listOf(sourceA),
             modelChoice = ModelChoice.FAST,
             threshold = 0.8f
@@ -177,6 +184,10 @@ class AnalyzeImagesUseCaseTest {
             .thenReturn(listOf(destinationEmbeddingA))
         `when`(embeddingRepository.getByFolderAndModel(destinationB.id, ModelChoice.FAST.modelFileName))
             .thenReturn(listOf(destinationEmbeddingB))
+        `when`(embeddingRepository.countByFolderAndModel(sourceA.id, ModelChoice.FAST.modelFileName))
+            .thenReturn(1)
+        `when`(embeddingRepository.countByFolderAndModel(sourceB.id, ModelChoice.FAST.modelFileName))
+            .thenReturn(1)
         `when`(embeddingRepository.getByFolderAndModel(sourceA.id, ModelChoice.FAST.modelFileName))
             .thenReturn(listOf(sourceEmbeddingA))
         `when`(embeddingRepository.getByFolderAndModel(sourceB.id, ModelChoice.FAST.modelFileName))
@@ -198,7 +209,8 @@ class AnalyzeImagesUseCaseTest {
         assertEquals(2, lastResult.suggestions.size)
         assertEquals(destinationA.id, lastResult.suggestions.first { it.image.id == 301L }.suggestedDestinationId)
         assertEquals(destinationB.id, lastResult.suggestions.first { it.image.id == 302L }.suggestedDestinationId)
-        assertEquals(2, capturedSuggestions?.size)
+        verify(suggestionRepository).deleteAll()
+        assertEquals(2, storedSuggestions.size)
     }
 
     @Test
@@ -211,6 +223,8 @@ class AnalyzeImagesUseCaseTest {
             .thenReturn(listOf(Embedding(1L, 101L, destinationVectorA, ModelChoice.FAST.modelFileName)))
         `when`(embeddingRepository.getByFolderAndModel(destinationB.id, ModelChoice.FAST.modelFileName))
             .thenReturn(listOf(Embedding(2L, 201L, destinationVectorB, ModelChoice.FAST.modelFileName)))
+        `when`(embeddingRepository.countByFolderAndModel(sourceA.id, ModelChoice.FAST.modelFileName))
+            .thenReturn(1)
         `when`(embeddingRepository.getByFolderAndModel(sourceA.id, ModelChoice.FAST.modelFileName))
             .thenReturn(listOf(Embedding(3L, 301L, sourceVector, ModelChoice.FAST.modelFileName)))
         doAnswer {
@@ -241,6 +255,8 @@ class AnalyzeImagesUseCaseTest {
 
         `when`(embeddingRepository.getByFolderAndModel(destinationA.id, ModelChoice.FAST.modelFileName))
             .thenReturn(listOf(Embedding(1L, 101L, destinationVector, ModelChoice.FAST.modelFileName)))
+        `when`(embeddingRepository.countByFolderAndModel(sourceA.id, ModelChoice.FAST.modelFileName))
+            .thenReturn(1)
         `when`(embeddingRepository.getByFolderAndModel(sourceA.id, ModelChoice.FAST.modelFileName))
             .thenReturn(listOf(Embedding(2L, 301L, sourceVector, ModelChoice.FAST.modelFileName)))
         doAnswer {

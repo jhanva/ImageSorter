@@ -119,6 +119,51 @@ class SimilarityCalculatorTest {
         )
     }
 
+    // -- topKFromMatrix --
+
+    @Test
+    fun `topKFromMatrix returns top k similar vectors sorted descending`() {
+        val dim = 3
+        val ids = longArrayOf(10L, 20L, 30L, 40L)
+        val matrix = floatArrayOf(
+            1f, 0f, 0f,
+            0f, 1f, 0f,
+            0.9f, 0.1f, 0f,
+            0.8f, 0.2f, 0f
+        )
+        val query = floatArrayOf(1f, 0f, 0f)
+
+        val result = SimilarityCalculator.topKFromMatrix(query, matrix, ids, dim, 4, 2)
+
+        assertEquals(2, result.size)
+        assertEquals(10L, result.ids[0])
+        assertEquals(1f, result.scores[0], 0.0001f)
+        assertEquals(30L, result.ids[1])
+        assertTrue(result.scores[0] >= result.scores[1])
+    }
+
+    @Test
+    fun `topKFromMatrix with k larger than count returns all`() {
+        val dim = 2
+        val ids = longArrayOf(1L, 2L)
+        val matrix = floatArrayOf(0.5f, 0.5f, 0.3f, 0.7f)
+        val query = floatArrayOf(1f, 0f)
+
+        val result = SimilarityCalculator.topKFromMatrix(query, matrix, ids, dim, 2, 10)
+
+        assertEquals(2, result.size)
+    }
+
+    // -- computeReferenceSupport (FloatArray overload) --
+
+    @Test
+    fun `computeReferenceSupport array overload matches list overload`() {
+        val scores = floatArrayOf(0.95f, 0.86f, 0.84f)
+        val fromArray = SimilarityCalculator.computeReferenceSupport(scores, scores.size)
+        val fromList = SimilarityCalculator.computeReferenceSupport(scores.toList())
+        assertEquals(fromList, fromArray, 0.0001f)
+    }
+
     @Test
     fun `computeScore rewards reference consensus over a single spiky match`() {
         val strongConsensus = SimilarityCalculator.computeScore(

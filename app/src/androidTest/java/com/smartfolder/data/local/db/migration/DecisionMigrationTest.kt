@@ -6,7 +6,6 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.smartfolder.data.local.db.AppDatabase
-import com.smartfolder.data.local.db.entities.DecisionEntity
 import com.smartfolder.di.DatabaseModule
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -50,39 +49,51 @@ class DecisionMigrationTest {
             .build()
 
         try {
-            val decisionDao = db.decisionDao()
+            val readable = db.openHelper.readableDatabase
 
-            val migrated = decisionDao.getByImageId(10L)
+            val migrated = readDecisionByImageId(readable, 10L)
             assertNotNull(migrated)
-            assertEquals(true, migrated?.accepted)
-            assertEquals(0.9f, migrated?.score ?: 0f, 0.0001f)
-            assertEquals(2_000L, migrated?.decidedAt)
+            assertEquals(true, migrated!!.accepted)
+            assertEquals(0.9f, migrated.score, 0.0001f)
+            assertEquals(2_000L, migrated.decidedAt)
 
             // Unique index + REPLACE should keep one row per imageId.
-            decisionDao.insert(
-                DecisionEntity(
-                    imageId = 10L,
-                    accepted = false,
-                    score = 0.1f,
-                    decidedAt = 3_000L
-                )
+            db.openHelper.writableDatabase.execSQL(
+                "INSERT OR REPLACE INTO decisions (imageId, accepted, score, decidedAt) " +
+                    "VALUES (10, 0, 0.1, 3000)"
             )
 
-            val updated = decisionDao.getByImageId(10L)
+            val updated = readDecisionByImageId(readable, 10L)
             assertNotNull(updated)
-            assertEquals(false, updated?.accepted)
-            assertEquals(0.1f, updated?.score ?: 0f, 0.0001f)
-            assertEquals(3_000L, updated?.decidedAt)
+            assertEquals(false, updated!!.accepted)
+            assertEquals(0.1f, updated.score, 0.0001f)
+            assertEquals(3_000L, updated.decidedAt)
 
-            val countCursor = db.openHelper.readableDatabase.query(
-                "SELECT COUNT(*) FROM decisions WHERE imageId = 10"
-            )
+            val countCursor = readable.query("SELECT COUNT(*) FROM decisions WHERE imageId = 10")
             countCursor.use {
                 it.moveToFirst()
                 assertEquals(1, it.getInt(0))
             }
         } finally {
             db.close()
+        }
+    }
+
+    private data class DecisionRow(val accepted: Boolean, val score: Float, val decidedAt: Long)
+
+    private fun readDecisionByImageId(
+        db: androidx.sqlite.db.SupportSQLiteDatabase,
+        imageId: Long
+    ): DecisionRow? {
+        return db.query(
+            "SELECT accepted, score, decidedAt FROM decisions WHERE imageId = $imageId LIMIT 1"
+        ).use { cursor ->
+            if (!cursor.moveToFirst()) return null
+            DecisionRow(
+                accepted = cursor.getInt(0) != 0,
+                score = cursor.getFloat(1),
+                decidedAt = cursor.getLong(2)
+            )
         }
     }
 

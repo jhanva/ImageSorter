@@ -1,12 +1,9 @@
 package com.smartfolder.domain.repository
 
 import com.smartfolder.domain.model.ImageInfo
-import kotlinx.coroutines.flow.Flow
 
 interface ImageRepository {
-    fun observeByFolder(folderId: Long): Flow<List<ImageInfo>>
     suspend fun getByFolder(folderId: Long): List<ImageInfo>
-    suspend fun getById(id: Long): ImageInfo?
     suspend fun getByIds(ids: List<Long>): List<ImageInfo>
     suspend fun getByUri(uri: String): ImageInfo?
     suspend fun getByUris(uris: List<String>): List<ImageInfo>

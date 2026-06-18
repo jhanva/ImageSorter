@@ -21,6 +21,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.yield
 import javax.inject.Inject
 
 class AnalyzeImagesUseCase @Inject constructor(
@@ -30,7 +31,7 @@ class AnalyzeImagesUseCase @Inject constructor(
 ) {
     companion object {
         private const val MAX_ANALYSIS_WORKERS = 6
-        private const val PROGRESS_EMIT_INTERVAL_MS = 250L
+        private const val SUGGESTION_BATCH_SIZE = 500
     }
 
     data class Result(
@@ -38,10 +39,13 @@ class AnalyzeImagesUseCase @Inject constructor(
         val progress: AnalysisProgress
     )
 
-    private data class DestinationIndex(
+    private class DestinationMatrix(
         val folderId: Long,
         val centroid: FloatArray,
-        val imageVectors: Map<Long, FloatArray>
+        val imageIds: LongArray,
+        val vectors: FloatArray,
+        val dim: Int,
+        val count: Int
     )
 
     private data class DestinationCandidate(
@@ -49,8 +53,9 @@ class AnalyzeImagesUseCase @Inject constructor(
         val score: Float,
         val centroidScore: Float,
         val topKScore: Float,
-        val topSimilarIds: List<Long>,
-        val topSimilarScores: List<Float>
+        val topSimilarIds: LongArray,
+        val topSimilarScores: FloatArray,
+        val topKSize: Int
     )
 
     private data class SourceSuggestion(
@@ -70,7 +75,6 @@ class AnalyzeImagesUseCase @Inject constructor(
     ): Flow<Result> = flow {
         try {
             emit(Result(emptyList(), AnalysisProgress(phase = AnalysisPhase.CENTROID)))
-            suggestionRepository.deleteAll()
 
             if (destinationFolders.isEmpty()) {
                 emit(Result(emptyList(), AnalysisProgress(
@@ -87,7 +91,7 @@ class AnalyzeImagesUseCase @Inject constructor(
                 return@flow
             }
 
-            val destinationIndexes = destinationFolders.map { folder ->
+            val destinationMatrices = destinationFolders.map { folder ->
                 val embeddings = embeddingRepository.getByFolderAndModel(folder.id, modelChoice.modelFileName)
                 if (embeddings.isEmpty()) {
                     emit(Result(emptyList(), AnalysisProgress(
@@ -95,120 +99,142 @@ class AnalyzeImagesUseCase @Inject constructor(
                         errorMessage = "Destination folder '${folder.displayName}' is not indexed for ${modelChoice.displayName}."
                     )))
                     return@flow
-                } else {
-                    DestinationIndex(
-                        folderId = folder.id,
-                        centroid = CentroidCalculator.compute(embeddings.map { it.vector }),
-                        imageVectors = embeddings.associate { it.imageId to it.vector }
-                    )
                 }
+                val dim = embeddings.first().vector.size
+                val count = embeddings.size
+                val ids = LongArray(count)
+                val matrix = FloatArray(count * dim)
+                val vectors = mutableListOf<FloatArray>()
+                embeddings.forEachIndexed { i, emb ->
+                    ids[i] = emb.imageId
+                    emb.vector.copyInto(matrix, i * dim)
+                    vectors.add(emb.vector)
+                }
+                DestinationMatrix(
+                    folderId = folder.id,
+                    centroid = CentroidCalculator.compute(vectors),
+                    imageIds = ids,
+                    vectors = matrix,
+                    dim = dim,
+                    count = count
+                )
             }
 
-            val sourceEmbeddings = sourceFolders.flatMap { folder ->
-                val embeddings = embeddingRepository.getByFolderAndModel(folder.id, modelChoice.modelFileName)
-                if (embeddings.isEmpty()) {
-                    emit(Result(emptyList(), AnalysisProgress(
-                        phase = AnalysisPhase.ERROR,
-                        errorMessage = "Source folder '${folder.displayName}' is not indexed for ${modelChoice.displayName}."
-                    )))
-                    return@flow
-                }
-                embeddings
+            val totalSource = sourceFolders.sumOf { folder ->
+                embeddingRepository.countByFolderAndModel(folder.id, modelChoice.modelFileName)
+            }
+            if (totalSource == 0) {
+                val firstName = sourceFolders.first().displayName
+                emit(Result(emptyList(), AnalysisProgress(
+                    phase = AnalysisPhase.ERROR,
+                    errorMessage = "Source folder '$firstName' is not indexed for ${modelChoice.displayName}."
+                )))
+                return@flow
             }
 
-            val total = sourceEmbeddings.size
+            suggestionRepository.deleteAll()
+
             emit(Result(emptyList(), AnalysisProgress(
                 phase = AnalysisPhase.COMPARING,
-                total = total
+                total = totalSource
             )))
 
             val safeTopK = topK.coerceAtLeast(1)
             val cpuCount = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
             val workerCount = resolveAnalysisWorkers(executionProfile, cpuCount)
-            val chunkSize = (total / (workerCount * 4)).coerceAtLeast(1)
-            val chunks = sourceEmbeddings.chunked(chunkSize)
 
-            val chunkResults = coroutineScope {
-                chunks.mapIndexed { chunkIndex, chunk ->
-                    async(Dispatchers.Default) {
-                        val localSuggestions = chunk.map { sourceEmbedding ->
-                            rankSourceImage(
-                                imageId = sourceEmbedding.imageId,
-                                sourceVector = sourceEmbedding.vector,
-                                destinations = destinationIndexes,
-                                threshold = threshold,
-                                topK = safeTopK
-                            )
-                        }
-                        chunkIndex to localSuggestions
+            var globalProcessed = 0
+            val pendingSuggestions = mutableListOf<SourceSuggestion>()
+            val createdAt = System.currentTimeMillis()
+
+            for (sourceFolder in sourceFolders) {
+                val sourceEmbeddings = embeddingRepository.getByFolderAndModel(
+                    sourceFolder.id, modelChoice.modelFileName
+                )
+                if (sourceEmbeddings.isEmpty()) {
+                    emit(Result(emptyList(), AnalysisProgress(
+                        phase = AnalysisPhase.ERROR,
+                        errorMessage = "Source folder '${sourceFolder.displayName}' is not indexed for ${modelChoice.displayName}."
+                    )))
+                    return@flow
+                }
+
+                val chunkSize = (sourceEmbeddings.size / (workerCount * 2)).coerceIn(1, 200)
+                val chunks = sourceEmbeddings.chunked(chunkSize)
+
+                for (wave in chunks.chunked(workerCount)) {
+                    val waveResults = coroutineScope {
+                        wave.map { chunk ->
+                            async(Dispatchers.Default) {
+                                chunk.mapIndexed { i, sourceEmbedding ->
+                                    if (i % 50 == 49) yield()
+                                    rankSourceImage(
+                                        imageId = sourceEmbedding.imageId,
+                                        sourceVector = sourceEmbedding.vector,
+                                        destinations = destinationMatrices,
+                                        threshold = threshold,
+                                        topK = safeTopK
+                                    )
+                                }
+                            }
+                        }.awaitAll()
                     }
-                }.awaitAll().sortedBy { it.first }
-            }
 
-            var processed = 0
-            var lastProgressEmitAt = 0L
-            val suggestions = mutableListOf<SourceSuggestion>()
-            chunkResults.forEach { (_, chunkSuggestions) ->
-                suggestions += chunkSuggestions
-                processed = (processed + chunkSize).coerceAtMost(total)
-                val now = System.currentTimeMillis()
-                if (processed == total || (now - lastProgressEmitAt) >= PROGRESS_EMIT_INTERVAL_MS) {
+                    for (chunkResult in waveResults) {
+                        pendingSuggestions += chunkResult
+                        globalProcessed = (globalProcessed + chunkResult.size).coerceAtMost(totalSource)
+                    }
+
+                    if (pendingSuggestions.size >= SUGGESTION_BATCH_SIZE) {
+                        flushSuggestions(pendingSuggestions, createdAt)
+                        pendingSuggestions.clear()
+                    }
+
+                    yield()
                     emit(Result(emptyList(), AnalysisProgress(
                         phase = AnalysisPhase.COMPARING,
-                        current = processed,
-                        total = total
+                        current = globalProcessed,
+                        total = totalSource
                     )))
-                    lastProgressEmitAt = now
                 }
             }
 
+            if (pendingSuggestions.isNotEmpty()) {
+                flushSuggestions(pendingSuggestions, createdAt)
+                pendingSuggestions.clear()
+            }
+
+            val storedSuggestions = suggestionRepository.getAll()
             val allIds = buildSet {
-                suggestions.forEach { suggestion ->
-                    add(suggestion.imageId)
-                    suggestion.best?.topSimilarIds?.forEach { add(it) }
+                storedSuggestions.forEach { s ->
+                    add(s.imageId)
+                    s.topSimilarIds.forEach { add(it) }
                 }
             }.toList()
             val imagesById = imageRepository.getByIds(allIds).associateBy { it.id }
 
-            val resolvedSuggestions = suggestions.mapNotNull { suggestion ->
-                val sourceImage = imagesById[suggestion.imageId] ?: return@mapNotNull null
-                val topSimilarImages = suggestion.best?.topSimilarIds
-                    ?.zip(suggestion.best.topSimilarScores)
-                    .orEmpty()
+            val resolvedSuggestions = storedSuggestions.mapNotNull { stored ->
+                val sourceImage = imagesById[stored.imageId] ?: return@mapNotNull null
+                val topSimilarImages = stored.topSimilarIds
+                    .zip(stored.topSimilarScores)
                     .mapNotNull { (id, score) ->
                         imagesById[id]?.let { SimilarMatch(image = it, score = score) }
                     }
                 SuggestionItem(
                     image = sourceImage,
-                    suggestedDestinationId = suggestion.assignedDestinationId,
-                    score = suggestion.best?.score ?: 0f,
-                    secondBestScore = suggestion.secondBestScore,
-                    centroidScore = suggestion.best?.centroidScore ?: 0f,
-                    topKScore = suggestion.best?.topKScore ?: 0f,
+                    suggestedDestinationId = stored.destinationFolderId,
+                    score = stored.score,
+                    secondBestScore = stored.secondBestScore,
+                    centroidScore = stored.centroidScore,
+                    topKScore = stored.topKScore,
                     topSimilarImages = topSimilarImages
                 )
             }.sortedWith(compareByDescending<SuggestionItem> { it.score }.thenByDescending { it.confidenceMargin })
 
-            val createdAt = System.currentTimeMillis()
-            val stored = resolvedSuggestions.map { suggestion ->
-                StoredSuggestion(
-                    imageId = suggestion.image.id,
-                    destinationFolderId = suggestion.suggestedDestinationId,
-                    score = suggestion.score,
-                    secondBestScore = suggestion.secondBestScore,
-                    centroidScore = suggestion.centroidScore,
-                    topKScore = suggestion.topKScore,
-                    topSimilarIds = suggestion.topSimilarImages.map { it.image.id },
-                    topSimilarScores = suggestion.topSimilarImages.map { it.score },
-                    createdAt = createdAt
-                )
-            }
-            suggestionRepository.replaceAll(stored)
-
             emit(Result(resolvedSuggestions, AnalysisProgress(
                 phase = AnalysisPhase.COMPLETE,
-                current = total,
-                total = total
+                current = totalSource,
+                total = totalSource
             )))
         } catch (e: Exception) {
             emit(Result(emptyList(), AnalysisProgress(
@@ -218,48 +244,66 @@ class AnalyzeImagesUseCase @Inject constructor(
         }
     }.flowOn(Dispatchers.Default)
 
+    private suspend fun flushSuggestions(suggestions: List<SourceSuggestion>, createdAt: Long) {
+        val stored = suggestions.map { suggestion ->
+            StoredSuggestion(
+                imageId = suggestion.imageId,
+                destinationFolderId = suggestion.assignedDestinationId,
+                score = suggestion.best?.score ?: 0f,
+                secondBestScore = suggestion.secondBestScore,
+                centroidScore = suggestion.best?.centroidScore ?: 0f,
+                topKScore = suggestion.best?.topKScore ?: 0f,
+                topSimilarIds = suggestion.best?.let { b ->
+                    (0 until b.topKSize).map { b.topSimilarIds[it] }
+                } ?: emptyList(),
+                topSimilarScores = suggestion.best?.let { b ->
+                    (0 until b.topKSize).map { b.topSimilarScores[it] }
+                } ?: emptyList(),
+                createdAt = createdAt
+            )
+        }
+        suggestionRepository.insertAll(stored)
+    }
+
     private fun rankSourceImage(
         imageId: Long,
         sourceVector: FloatArray,
-        destinations: List<DestinationIndex>,
+        destinations: List<DestinationMatrix>,
         threshold: Float,
         topK: Int
     ): SourceSuggestion {
+        val centroidCutoff = threshold * 0.6f
         val rankedCandidates = destinations.mapNotNull { destination ->
             val centroidScore = SimilarityCalculator.cosineSimilarity(sourceVector, destination.centroid)
-            if (centroidScore < threshold * 0.5f) {
+            if (centroidScore < centroidCutoff) {
                 return@mapNotNull null
             }
 
-            val topSimilarities = mutableListOf<Pair<Long, Float>>()
-            var minInTopK = Float.MIN_VALUE
-            destination.imageVectors.forEach { (destinationImageId, destinationVector) ->
-                val similarity = SimilarityCalculator.cosineSimilarity(sourceVector, destinationVector)
-                if (topSimilarities.size < topK) {
-                    topSimilarities += destinationImageId to similarity
-                    if (topSimilarities.size == topK) {
-                        minInTopK = topSimilarities.minOf { it.second }
-                    }
-                } else if (similarity > minInTopK) {
-                    val minIndex = topSimilarities.indexOfFirst { it.second == minInTopK }
-                    topSimilarities[minIndex] = destinationImageId to similarity
-                    minInTopK = topSimilarities.minOf { it.second }
-                }
-            }
+            val topKResult = SimilarityCalculator.topKFromMatrix(
+                query = sourceVector,
+                matrix = destination.vectors,
+                ids = destination.imageIds,
+                dim = destination.dim,
+                count = destination.count,
+                k = topK
+            )
 
-            topSimilarities.sortByDescending { it.second }
-            val topKScore = if (topSimilarities.isNotEmpty()) {
-                topSimilarities.map { it.second }.average().toFloat()
-            } else {
-                0f
+            if (topKResult.size == 0) return@mapNotNull null
+
+            var topKSum = 0f
+            var topKMax = topKResult.scores[0]
+            for (i in 0 until topKResult.size) {
+                topKSum += topKResult.scores[i]
+                if (topKResult.scores[i] > topKMax) topKMax = topKResult.scores[i]
             }
-            val topKMax = topSimilarities.maxOfOrNull { it.second } ?: 0f
+            val topKMean = topKSum / topKResult.size
+
             val referenceSupport = SimilarityCalculator.computeReferenceSupport(
-                topSimilarities.map { it.second }
+                topKResult.scores, topKResult.size
             )
             val combinedScore = SimilarityCalculator.computeScore(
                 centroidScore = centroidScore,
-                topKMean = topKScore,
+                topKMean = topKMean,
                 topKMax = topKMax,
                 referenceSupport = referenceSupport
             )
@@ -267,9 +311,10 @@ class AnalyzeImagesUseCase @Inject constructor(
                 destinationFolderId = destination.folderId,
                 score = combinedScore,
                 centroidScore = centroidScore,
-                topKScore = topKScore,
-                topSimilarIds = topSimilarities.map { it.first },
-                topSimilarScores = topSimilarities.map { it.second }
+                topKScore = topKMean,
+                topSimilarIds = topKResult.ids,
+                topSimilarScores = topKResult.scores,
+                topKSize = topKResult.size
             )
         }.sortedByDescending { it.score }
 

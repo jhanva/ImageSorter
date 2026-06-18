@@ -16,6 +16,12 @@ class SuggestionRepositoryImpl @Inject constructor(
         return suggestionDao.getAll().map { it.toDomain() }
     }
 
+    override suspend fun insertAll(suggestions: List<StoredSuggestion>) {
+        if (suggestions.isNotEmpty()) {
+            suggestionDao.insertAll(suggestions.map { it.toEntity() })
+        }
+    }
+
     override suspend fun replaceAll(suggestions: List<StoredSuggestion>) {
         suggestionDao.deleteAll()
         if (suggestions.isNotEmpty()) {
