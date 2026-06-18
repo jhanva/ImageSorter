@@ -1,7 +1,7 @@
 package com.smartfolder.domain.usecase
 
 import android.net.TestUri
-import android.net.Uri
+import android.provider.DocumentsContract
 import com.smartfolder.data.media.MediaStoreFolderProvider
 import com.smartfolder.data.saf.SafManager
 import com.smartfolder.domain.model.Folder
@@ -14,7 +14,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
+import org.mockito.ArgumentMatchers.anyString
+import org.mockito.Mockito
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.`when`
 
 class SelectFolderUseCaseTest {
@@ -72,6 +75,26 @@ class SelectFolderUseCaseTest {
         assertEquals("Updated name", updated.displayName)
         assertEquals(updated, result)
         assertEquals(emptyList<Folder>(), folderRepository.insertedFolders)
+    }
+
+    @Test
+    fun `invalid MediaStore count query does not block selecting folder`() = runTest {
+        val uri = TestUri("content://tree-pictures")
+
+        `when`(safManager.getFolderDisplayName(uri)).thenReturn("Pictures")
+        doThrow(IllegalArgumentException("Invalid COUNT(*)"))
+            .`when`(mediaStoreFolderProvider)
+            .getImageCountForDocumentId(anyString())
+        val result = Mockito.mockStatic(DocumentsContract::class.java).use { documentsContract ->
+            documentsContract.`when`<String?> { DocumentsContract.getTreeDocumentId(uri) }
+                .thenReturn("primary:Pictures")
+            useCase(uri, FolderRole.SOURCE)
+        }
+
+        assertEquals("Pictures", result.displayName)
+        assertEquals(FolderRole.SOURCE, result.role)
+        assertEquals(0, result.imageCount)
+        assertEquals(1, folderRepository.insertedFolders.size)
     }
 
     private class RecordingFolderRepository : FolderRepository {

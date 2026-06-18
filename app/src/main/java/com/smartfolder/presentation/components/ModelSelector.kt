@@ -15,10 +15,11 @@ import com.smartfolder.domain.model.ModelChoice
 fun ModelSelector(
     selected: ModelChoice,
     onSelected: (ModelChoice) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    availableModels: List<ModelChoice> = ModelChoice.entries
 ) {
     FlowRow(modifier = modifier) {
-        ModelChoice.entries.forEach { choice ->
+        availableModels.forEach { choice ->
             FilterChip(
                 selected = selected == choice,
                 onClick = { onSelected(choice) },

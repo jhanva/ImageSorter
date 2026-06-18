@@ -19,7 +19,9 @@ class SelectFolderUseCase @Inject constructor(
         val displayName = safManager.getFolderDisplayName(uri)
         val documentId = runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull()
         val imageCount = if (documentId != null) {
-            mediaStoreFolderProvider.getImageCountForDocumentId(documentId)
+            runCatching {
+                mediaStoreFolderProvider.getImageCountForDocumentId(documentId)
+            }.getOrDefault(0)
         } else {
             0
         }

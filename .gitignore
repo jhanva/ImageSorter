@@ -116,3 +116,4 @@ Thumbs.db
 
 # ML model files (downloaded by Gradle task)
 app/src/main/assets/models/*.tflite
+app/src/main/assets/models/*.onnx

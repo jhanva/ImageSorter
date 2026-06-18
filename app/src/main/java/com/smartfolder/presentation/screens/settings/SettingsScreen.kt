@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import com.smartfolder.presentation.components.ExecutionProfileSelector
 import com.smartfolder.presentation.components.ModelSelector
 import com.smartfolder.presentation.components.ThresholdSlider
+import com.smartfolder.domain.model.ModelChoice
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,6 +45,8 @@ fun SettingsScreen(
     onNavigateBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val availableModels = remember { ModelChoice.availableIn(context) }
     var showClearConfirmation by remember { mutableStateOf(false) }
 
     if (showClearConfirmation) {
@@ -118,7 +121,8 @@ fun SettingsScreen(
             )
             ModelSelector(
                 selected = uiState.modelChoice,
-                onSelected = { viewModel.setModelChoice(it) }
+                onSelected = { viewModel.setModelChoice(it) },
+                availableModels = availableModels
             )
 
             // Execution profile

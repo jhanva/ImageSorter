@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.smartfolder.domain.model.Folder
 import com.smartfolder.domain.model.ImageFolderOption
+import com.smartfolder.domain.model.ModelChoice
 import com.smartfolder.presentation.components.ErrorBanner
 import com.smartfolder.presentation.components.FolderCard
 import com.smartfolder.presentation.components.FolderSelectionBottomSheet
@@ -194,10 +195,12 @@ fun HomeScreen(
                 primaryEnabled = !uiState.isIndexingDestinations && !uiState.isIndexingSources
             )
 
+            val availableModels = remember { ModelChoice.availableIn(context) }
             EngineCard(
                 modelChoice = uiState.modelChoice,
                 availableFolderCount = uiState.availableImageFolders.size,
-                onSelectModel = viewModel::setModelChoice
+                onSelectModel = viewModel::setModelChoice,
+                availableModels = availableModels
             )
 
             FolderGroupCard(
@@ -336,9 +339,10 @@ private fun MetricChip(
 
 @Composable
 private fun EngineCard(
-    modelChoice: com.smartfolder.domain.model.ModelChoice,
+    modelChoice: ModelChoice,
     availableFolderCount: Int,
-    onSelectModel: (com.smartfolder.domain.model.ModelChoice) -> Unit
+    onSelectModel: (ModelChoice) -> Unit,
+    availableModels: List<ModelChoice> = ModelChoice.entries
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -364,7 +368,8 @@ private fun EngineCard(
             )
             ModelSelector(
                 selected = modelChoice,
-                onSelected = onSelectModel
+                onSelected = onSelectModel,
+                availableModels = availableModels
             )
             Text(
                 text = "$availableFolderCount MediaStore folders detected on this device.",

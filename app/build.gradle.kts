@@ -9,6 +9,13 @@ val versionProperties = Properties().apply {
     }
 }
 
+val signingProperties = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) {
+        file.inputStream().use(::load)
+    }
+}
+
 fun versionSetting(
     name: String,
     defaultValue: String
@@ -46,6 +53,27 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            val storeFilePath = signingProperties.getProperty("storeFile")
+            val storePasswordValue = signingProperties.getProperty("storePassword")
+            val keyAliasValue = signingProperties.getProperty("keyAlias")
+            val keyPasswordValue = signingProperties.getProperty("keyPassword")
+
+            if (
+                storeFilePath != null &&
+                storePasswordValue != null &&
+                keyAliasValue != null &&
+                keyPasswordValue != null
+            ) {
+                storeFile = rootProject.file(storeFilePath)
+                storePassword = storePasswordValue
+                keyAlias = keyAliasValue
+                keyPassword = keyPasswordValue
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
@@ -53,6 +81,7 @@ android {
         }
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -98,11 +127,6 @@ android.applicationVariants.all {
 
 val downloadModels by tasks.registering {
     val modelsDir = file("src/main/assets/models")
-    // MobileCLIP-S0 image encoder (mobileclip_s0_image.onnx) is NOT auto-downloaded.
-    // Export it from Apple's official checkpoint at https://github.com/apple/ml-mobileclip
-    // and place the ONNX file at app/src/main/assets/models/mobileclip_s0_image.onnx.
-    // If the file is missing, the "Semantic" model option will fail to initialize but the
-    // app still works with the MobileNet models.
     val models = mapOf(
         "mobilenet_v3_small.tflite" to mapOf(
             "url" to "https://storage.googleapis.com/mediapipe-models/image_embedder/mobilenet_v3_small/float32/latest/mobilenet_v3_small.tflite",
@@ -111,6 +135,10 @@ val downloadModels by tasks.registering {
         "mobilenet_v3_large.tflite" to mapOf(
             "url" to "https://storage.googleapis.com/mediapipe-models/image_embedder/mobilenet_v3_large/float32/latest/mobilenet_v3_large.tflite",
             "minSize" to "10000"
+        ),
+        "mobileclip_s0_image.onnx" to mapOf(
+            "url" to "https://huggingface.co/Xenova/mobileclip_s0/resolve/main/onnx/vision_model.onnx",
+            "minSize" to "40000000"
         )
     )
 

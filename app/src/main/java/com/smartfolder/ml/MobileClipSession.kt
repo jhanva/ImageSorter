@@ -15,19 +15,23 @@ import kotlin.math.sqrt
 internal class MobileClipSession private constructor(
     private val env: OrtEnvironment,
     private val session: OrtSession,
-    private val inputName: String
+    private val inputName: String,
+    private val inputSize: Int
 ) {
     companion object {
         private const val TAG = "MobileClipSession"
         private const val EMBED_TIMEOUT_MS = 30_000L
-        private const val INPUT_SIZE = 224
 
-        // CLIP normalization (ImageNet-ish but specific to CLIP)
         private val MEAN = floatArrayOf(0.48145466f, 0.4578275f, 0.40821073f)
         private val STD = floatArrayOf(0.26862954f, 0.26130258f, 0.27577711f)
 
         suspend fun create(context: Context, modelFileName: String): MobileClipSession =
             withContext(Dispatchers.IO) {
+                val assetPath = "models/$modelFileName"
+                val available = context.assets.list("models")?.contains(modelFileName) == true
+                if (!available) {
+                    error("Model file not bundled in assets: $assetPath")
+                }
                 val env = OrtEnvironment.getEnvironment()
                 val opts = OrtSession.SessionOptions().apply {
                     setIntraOpNumThreads(
@@ -37,11 +41,16 @@ internal class MobileClipSession private constructor(
                         Log.w(TAG, "NNAPI delegate unavailable: ${it.message}")
                     }
                 }
-                val modelBytes = context.assets.open("models/$modelFileName").use { it.readBytes() }
+                val modelBytes = context.assets.open(assetPath).use { it.readBytes() }
                 val session = env.createSession(modelBytes, opts)
                 val inputName = session.inputNames.firstOrNull()
                     ?: error("ONNX model has no inputs: $modelFileName")
-                MobileClipSession(env, session, inputName)
+                val inputShape = session.inputInfo[inputName]
+                    ?.info
+                    ?.let { it as? ai.onnxruntime.TensorInfo }
+                    ?.shape
+                val inputSize = inputShape?.lastOrNull()?.toInt() ?: 256
+                MobileClipSession(env, session, inputName, inputSize)
             }
     }
 
@@ -49,7 +58,7 @@ internal class MobileClipSession private constructor(
         withContext(Dispatchers.Default) {
             try {
                 val buffer = preprocess(bitmap)
-                val shape = longArrayOf(1, 3, INPUT_SIZE.toLong(), INPUT_SIZE.toLong())
+                val shape = longArrayOf(1, 3, inputSize.toLong(), inputSize.toLong())
                 OnnxTensor.createTensor(env, buffer, shape).use { tensor ->
                     session.run(mapOf(inputName to tensor)).use { result ->
                         val raw = extractEmbedding(result.get(0).value) ?: return@withContext null
@@ -71,16 +80,16 @@ internal class MobileClipSession private constructor(
     }
 
     private fun preprocess(bitmap: Bitmap): FloatBuffer {
-        val scaled = if (bitmap.width == INPUT_SIZE && bitmap.height == INPUT_SIZE) {
+        val scaled = if (bitmap.width == inputSize && bitmap.height == inputSize) {
             bitmap
         } else {
-            Bitmap.createScaledBitmap(bitmap, INPUT_SIZE, INPUT_SIZE, true)
+            Bitmap.createScaledBitmap(bitmap, inputSize, inputSize, true)
         }
-        val pixels = IntArray(INPUT_SIZE * INPUT_SIZE)
-        scaled.getPixels(pixels, 0, INPUT_SIZE, 0, 0, INPUT_SIZE, INPUT_SIZE)
+        val pixels = IntArray(inputSize * inputSize)
+        scaled.getPixels(pixels, 0, inputSize, 0, 0, inputSize, inputSize)
         if (scaled !== bitmap) scaled.recycle()
 
-        val buffer = FloatBuffer.allocate(3 * INPUT_SIZE * INPUT_SIZE)
+        val buffer = FloatBuffer.allocate(3 * inputSize * inputSize)
         // CHW layout: R plane, then G plane, then B plane
         for (p in pixels) {
             val r = ((p shr 16) and 0xFF) / 255f
