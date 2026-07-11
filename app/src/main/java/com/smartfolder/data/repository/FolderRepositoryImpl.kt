@@ -26,6 +26,10 @@ class FolderRepositoryImpl @Inject constructor(
         return folderDao.getByRole(role.name).map { it.toDomain() }
     }
 
+    override suspend fun getById(id: Long): Folder? {
+        return folderDao.getById(id)?.toDomain()
+    }
+
     override suspend fun getByUri(uri: String): Folder? {
         return folderDao.getByUri(uri)?.toDomain()
     }

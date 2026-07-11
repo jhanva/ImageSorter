@@ -1,0 +1,122 @@
+<resources>
+    <string name="app_name">Image Sorter</string>
+
+    <!-- Comunes -->
+    <string name="action_back">Atras</string>
+    <string name="action_cancel">Cancelar</string>
+    <string name="action_close">Cerrar</string>
+    <string name="action_dismiss">Descartar</string>
+    <string name="action_remove">Quitar</string>
+    <string name="action_retry">Reintentar</string>
+    <string name="action_settings">Ajustes</string>
+    <string name="action_undo">Deshacer</string>
+
+    <!-- Home -->
+    <string name="home_subtitle">Organizador offline de imagenes de anime y videojuegos</string>
+    <string name="hero_setup_title">Configura tu organizador</string>
+    <string name="hero_setup_subtitle">Agrega carpetas destino (tus categorias organizadas) y carpetas origen (las desordenadas).</string>
+    <string name="hero_indexing_title">Indexando carpetas</string>
+    <string name="hero_indexing_subtitle">Manten la app abierta mientras se generan los embeddings locales.</string>
+    <string name="hero_ready_title">Listo para organizar</string>
+    <string name="hero_ready_subtitle">Analizar indexa lo pendiente y sugiere una carpeta para cada imagen.</string>
+    <string name="hero_steps">%1$d de %2$d pasos completados</string>
+    <string name="action_choose_folders">Elegir carpetas</string>
+    <string name="action_analyze">Analizar</string>
+    <string name="action_indexing">Indexando…</string>
+    <string name="action_continue_review">Continuar revision (%1$d pendientes)</string>
+    <string name="home_destinations_title">Destinos</string>
+    <string name="home_destinations_empty">Agrega las carpetas a las que quieres mover imagenes.</string>
+    <string name="home_sources_title">Origenes</string>
+    <string name="home_sources_empty">Agrega una o mas carpetas con imagenes sin ordenar.</string>
+    <string name="home_add_folder">Agregar carpeta</string>
+    <string name="folder_indexed_count">%1$d/%2$d indexadas</string>
+    <string name="folder_image_count">%1$d imagenes</string>
+    <string name="menu_reindex">Reindexar</string>
+    <string name="menu_remove">Quitar</string>
+    <string name="remove_folder_title">Quitar carpeta?</string>
+    <string name="remove_folder_message">"%1$s" se quitara de la app. No se borra ningun archivo del dispositivo.</string>
+    <string name="folder_options">Opciones de carpeta</string>
+
+    <!-- Selector de carpetas -->
+    <string name="sheet_title">Elige una carpeta de imagenes</string>
+    <string name="sheet_subtitle">Las carpetas provienen del indice de medios del dispositivo.</string>
+    <string name="sheet_loading">Cargando carpetas…</string>
+    <string name="sheet_empty_title">No se encontraron carpetas</string>
+    <string name="sheet_empty_message">Concede acceso a las imagenes e intenta de nuevo.</string>
+    <string name="sheet_use">Usar</string>
+
+    <!-- Analisis -->
+    <string name="analysis_title">Analisis</string>
+    <string name="analysis_subtitle">Todo se ejecuta localmente en este dispositivo</string>
+    <string name="analysis_phase_preparing">Preparando analisis</string>
+    <string name="analysis_phase_indexing_destinations">Indexando destinos</string>
+    <string name="analysis_phase_indexing_sources">Indexando origenes</string>
+    <string name="analysis_phase_centroid">Preparando huellas de carpetas</string>
+    <string name="analysis_phase_comparing">Comparando imagenes</string>
+    <string name="analysis_phase_complete">Analisis completado</string>
+    <string name="analysis_phase_stopped">Analisis detenido</string>
+    <string name="analysis_progress_count">%1$d de %2$d procesadas</string>
+    <string name="analysis_progress_preparing">Preparando trabajo local</string>
+    <string name="analysis_cancel_title">Cancelar analisis</string>
+    <string name="analysis_cancel_message">El progreso se perdera. Cancelar el analisis actual?</string>
+    <string name="analysis_cancel_confirm">Cancelar analisis</string>
+    <string name="analysis_cancel_continue">Continuar</string>
+    <string name="analysis_go_back">Volver</string>
+    <string name="analysis_done_title">Sugerencias listas</string>
+    <string name="analysis_done_message">Se generaron %1$d sugerencias. Revisalas y mueve las imagenes por lotes.</string>
+    <string name="analysis_open_results">Abrir resultados</string>
+
+    <!-- Resultados -->
+    <string name="results_title">Revision</string>
+    <string name="results_subtitle">%1$d sugerencias visibles</string>
+    <string name="results_groups_count">%1$d grupos</string>
+    <string name="results_unassigned_count">%1$d sin asignar</string>
+    <string name="results_selected_count">%1$d seleccionadas</string>
+    <string name="results_threshold_label">Umbral de similitud: %1$d%%</string>
+    <string name="results_select_confident">Seleccionar alta confianza</string>
+    <string name="results_clear_selection">Limpiar seleccion</string>
+    <string name="results_section_images">%1$d imagenes</string>
+    <string name="results_section_select_all">Seleccionar todo</string>
+    <string name="results_unassigned_section">Sin asignar</string>
+    <string name="results_move_selected">Mover %1$d seleccionadas</string>
+    <string name="results_match_label">Match</string>
+    <string name="results_margin_label">Margen</string>
+    <string name="results_possible_duplicate">Posible duplicado</string>
+    <string name="results_choose_destination">Elegir destino</string>
+    <string name="results_change_destination">Cambiar</string>
+    <string name="results_moved_summary">Movidas: %1$d</string>
+    <string name="results_moved_summary_detailed">Movidas: %1$d, Copiadas: %2$d, Fallidas: %3$d</string>
+    <string name="results_restored_summary">Restauradas: %1$d</string>
+    <string name="results_empty_title">Aun no hay sugerencias</string>
+    <string name="results_empty_message">Ejecuta un analisis para generar sugerencias de destino.</string>
+    <string name="results_empty_filtered_title">Nada supera el umbral actual</string>
+    <string name="results_empty_filtered_message">Baja el umbral para revisar coincidencias mas debiles.</string>
+    <string name="results_write_denied">Permiso de escritura denegado. No se pudieron mover las imagenes.</string>
+    <string name="results_write_request_failed">No se pudo solicitar permiso de escritura para las imagenes.</string>
+    <string name="results_expand_section">Expandir seccion</string>
+    <string name="results_collapse_section">Contraer seccion</string>
+    <string name="results_preview">Ver imagen</string>
+
+    <!-- Ajustes -->
+    <string name="settings_title">Ajustes</string>
+    <string name="settings_threshold_title">Umbral por defecto</string>
+    <string name="settings_model_title">Modelo de embeddings</string>
+    <string name="settings_model_hint">Semantico entiende estilo de arte y escenas. Anime se especializa en identidad de personajes y rinde mejor cuando cada carpeta es un personaje o serie con un solo personaje por imagen.</string>
+    <string name="model_semantic">Semantico (recomendado)</string>
+    <string name="model_anime">Anime (personajes)</string>
+    <string name="model_fast">Rapido</string>
+    <string name="model_precise">Preciso</string>
+    <string name="settings_profile_title">Perfil de ejecucion</string>
+    <string name="profile_battery">Ahorro de bateria</string>
+    <string name="profile_balanced">Equilibrado</string>
+    <string name="profile_performance">Rendimiento</string>
+    <string name="settings_appearance_title">Apariencia</string>
+    <string name="settings_dynamic_color">Colores del sistema (Material You)</string>
+    <string name="settings_dark_mode">Modo oscuro</string>
+    <string name="settings_clear_cache">Borrar toda la cache</string>
+    <string name="settings_clear_cache_title">Borrar toda la cache</string>
+    <string name="settings_clear_cache_message">Se eliminaran todas las carpetas indexadas, embeddings y sugerencias. No se puede deshacer.</string>
+    <string name="settings_clear_confirm">Borrar</string>
+    <string name="settings_cache_cleared">Cache borrada</string>
+    <string name="settings_cache_failed">No se pudo borrar la cache</string>
+</resources>

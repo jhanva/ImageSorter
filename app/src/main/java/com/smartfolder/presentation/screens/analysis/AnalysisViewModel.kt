@@ -3,10 +3,14 @@ package com.smartfolder.presentation.screens.analysis
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartfolder.domain.model.AnalysisPhase
+import com.smartfolder.domain.model.AnalysisProgress
+import com.smartfolder.domain.model.Folder
 import com.smartfolder.domain.model.FolderRole
+import com.smartfolder.domain.model.IndexingPhase
 import com.smartfolder.domain.repository.FolderRepository
 import com.smartfolder.domain.repository.SettingsRepository
 import com.smartfolder.domain.usecase.AnalyzeImagesUseCase
+import com.smartfolder.domain.usecase.IndexFolderUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,6 +23,7 @@ import javax.inject.Inject
 @HiltViewModel
 class AnalysisViewModel @Inject constructor(
     private val analyzeImagesUseCase: AnalyzeImagesUseCase,
+    private val indexFolderUseCase: IndexFolderUseCase,
     private val folderRepository: FolderRepository,
     private val settingsRepository: SettingsRepository
 ) : ViewModel() {
@@ -40,7 +45,7 @@ class AnalysisViewModel @Inject constructor(
                 if (destinationFolders.isEmpty() || sourceFolders.isEmpty()) {
                     _uiState.value = _uiState.value.copy(
                         isAnalyzing = false,
-                        error = "Select and index at least one destination folder and one source folder."
+                        error = "Select at least one destination folder and one source folder."
                     )
                     return@launch
                 }
@@ -48,6 +53,13 @@ class AnalysisViewModel @Inject constructor(
                 val modelChoice = settingsRepository.modelChoice.first()
                 val executionProfile = settingsRepository.executionProfile.first()
                 val threshold = settingsRepository.threshold.first()
+
+                // One-tap pipeline: indexing is incremental (cached embeddings
+                // are skipped), so every folder is refreshed before comparing.
+                for (folder in destinationFolders + sourceFolders) {
+                    val indexed = indexFolder(folder, modelChoice, executionProfile)
+                    if (!indexed) return@launch
+                }
 
                 analyzeImagesUseCase(
                     destinationFolders = destinationFolders,
@@ -77,6 +89,40 @@ class AnalysisViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    private suspend fun indexFolder(
+        folder: Folder,
+        modelChoice: com.smartfolder.domain.model.ModelChoice,
+        executionProfile: com.smartfolder.domain.model.ExecutionProfile
+    ): Boolean {
+        val analysisPhase = if (folder.role == FolderRole.DESTINATION) {
+            AnalysisPhase.INDEXING_DESTINATIONS
+        } else {
+            AnalysisPhase.INDEXING_SOURCES
+        }
+
+        var failureMessage: String? = null
+        indexFolderUseCase(folder, modelChoice, executionProfile).collect { progress ->
+            if (progress.phase == IndexingPhase.ERROR) {
+                failureMessage = progress.errorMessage ?: "Indexing failed for '${folder.displayName}'."
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    progress = AnalysisProgress(
+                        phase = analysisPhase,
+                        current = progress.current,
+                        total = progress.total,
+                        currentFileName = "[${folder.displayName}] ${progress.currentFileName}".trim()
+                    )
+                )
+            }
+        }
+
+        failureMessage?.let { message ->
+            _uiState.value = _uiState.value.copy(isAnalyzing = false, error = message)
+            return false
+        }
+        return true
     }
 
     fun cancelAnalysis() {

@@ -9,7 +9,7 @@ import org.junit.Test
 class ResultsVisualsTest {
 
     @Test
-    fun buildOverview_reportsManualRoutingCount_whenUnassignedSuggestionsExist() {
+    fun `overview reports unassigned count when suggestions need manual routing`() {
         val suggestions = listOf(
             suggestion(id = 1, destinationId = 10),
             suggestion(id = 2, destinationId = 0),
@@ -22,13 +22,13 @@ class ResultsVisualsTest {
             selectedCount = 0
         )
 
-        assertEquals("Sort review", overview.title)
-        assertEquals("2 destination groups, 2 images need manual routing", overview.summary)
-        assertEquals("Select images to move", overview.actionLabel)
+        assertEquals(2, overview.destinationGroupCount)
+        assertEquals(2, overview.unassignedCount)
+        assertEquals(0, overview.selectedCount)
     }
 
     @Test
-    fun buildOverview_reportsSelectionCount_whenImagesAreSelected() {
+    fun `overview reports selection count when images are selected`() {
         val suggestions = listOf(
             suggestion(id = 1, destinationId = 10),
             suggestion(id = 2, destinationId = 20)
@@ -40,8 +40,8 @@ class ResultsVisualsTest {
             selectedCount = 2
         )
 
-        assertEquals("2 destination groups, 2 selected", overview.summary)
-        assertEquals("Move 2 selected images", overview.actionLabel)
+        assertEquals(2, overview.selectedCount)
+        assertEquals(0, overview.unassignedCount)
     }
 
     private fun suggestion(id: Long, destinationId: Long): SuggestionItem {

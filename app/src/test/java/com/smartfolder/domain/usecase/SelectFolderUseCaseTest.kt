@@ -107,6 +107,8 @@ class SelectFolderUseCaseTest {
         override suspend fun getByRole(role: FolderRole): List<Folder> =
             byUri.values.filter { it.role == role }
 
+        override suspend fun getById(id: Long): Folder? = null
+
         override suspend fun getByUri(uri: String): Folder? = byUri[uri]
 
         override suspend fun insert(folder: Folder): Long {

@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -33,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.smartfolder.R
 import com.smartfolder.domain.model.AnalysisPhase
@@ -53,20 +53,20 @@ fun AnalysisScreen(
     if (showCancelConfirmation) {
         AlertDialog(
             onDismissRequest = { showCancelConfirmation = false },
-            title = { Text("Cancel analysis") },
-            text = { Text("Are you sure you want to cancel the current analysis? Progress will be lost.") },
+            title = { Text(stringResource(R.string.analysis_cancel_title)) },
+            text = { Text(stringResource(R.string.analysis_cancel_message)) },
             confirmButton = {
                 TextButton(onClick = {
                     showCancelConfirmation = false
                     viewModel.cancelAnalysis()
                     onNavigateBack()
                 }) {
-                    Text("Cancel analysis")
+                    Text(stringResource(R.string.analysis_cancel_confirm))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showCancelConfirmation = false }) {
-                    Text("Continue")
+                    Text(stringResource(R.string.analysis_cancel_continue))
                 }
             }
         )
@@ -76,14 +76,24 @@ fun AnalysisScreen(
         viewModel.startAnalysis()
     }
 
+    val phaseLabel = when (uiState.progress.phase) {
+        AnalysisPhase.IDLE -> stringResource(R.string.analysis_phase_preparing)
+        AnalysisPhase.INDEXING_DESTINATIONS -> stringResource(R.string.analysis_phase_indexing_destinations)
+        AnalysisPhase.INDEXING_SOURCES -> stringResource(R.string.analysis_phase_indexing_sources)
+        AnalysisPhase.CENTROID -> stringResource(R.string.analysis_phase_centroid)
+        AnalysisPhase.COMPARING -> stringResource(R.string.analysis_phase_comparing)
+        AnalysisPhase.COMPLETE -> stringResource(R.string.analysis_phase_complete)
+        AnalysisPhase.ERROR -> stringResource(R.string.analysis_phase_stopped)
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Column {
-                        Text("Analysis")
+                        Text(stringResource(R.string.analysis_title))
                         Text(
-                            text = "Building destination suggestions locally",
+                            text = stringResource(R.string.analysis_subtitle),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -97,7 +107,10 @@ fun AnalysisScreen(
                             onNavigateBack()
                         }
                     }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_back)
+                        )
                     }
                 }
             )
@@ -115,73 +128,64 @@ fun AnalysisScreen(
                 ErrorBanner(message = error)
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(onClick = { viewModel.startAnalysis() }) {
-                    Text("Retry analysis")
+                    Text(stringResource(R.string.action_retry))
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedButton(onClick = onNavigateBack) {
-                    Text("Go back")
+                    Text(stringResource(R.string.analysis_go_back))
                 }
             } ?: run {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(28.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                if (uiState.progress.phase != AnalysisPhase.COMPLETE) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = phaseLabel,
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                text = stringResource(R.string.analysis_subtitle),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    ProgressIndicator(
+                        phaseLabel = phaseLabel,
+                        current = uiState.progress.current,
+                        total = uiState.progress.total,
+                        currentFileName = uiState.progress.currentFileName
                     )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Text(
-                            text = when (uiState.progress.phase) {
-                                AnalysisPhase.IDLE -> "Preparing analysis"
-                                AnalysisPhase.INDEXING_DESTINATIONS -> "Checking destination embeddings"
-                                AnalysisPhase.INDEXING_SOURCES -> "Checking source embeddings"
-                                AnalysisPhase.CENTROID -> "Preparing destination fingerprints"
-                                AnalysisPhase.COMPARING -> "Comparing source images against your library"
-                                AnalysisPhase.COMPLETE -> "Analysis complete"
-                                AnalysisPhase.ERROR -> "Analysis stopped"
-                            },
-                            style = MaterialTheme.typography.headlineSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        Text(
-                            text = "The app is matching source images against every indexed destination using local embeddings stored on the device.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.88f)
-                        )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    if (uiState.isAnalyzing) {
+                        OutlinedButton(
+                            onClick = { showCancelConfirmation = true }
+                        ) {
+                            Text(stringResource(R.string.action_cancel))
+                        }
                     }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                ProgressIndicator(
-                    phase = uiState.progress.phase.name,
-                    current = uiState.progress.current,
-                    total = uiState.progress.total,
-                    currentFileName = uiState.progress.currentFileName
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                if (uiState.isAnalyzing) {
-                    OutlinedButton(
-                        onClick = { showCancelConfirmation = true }
-                    ) {
-                        Text("Cancel")
-                    }
-                }
-
-                if (uiState.progress.phase == AnalysisPhase.COMPLETE) {
-                    Spacer(modifier = Modifier.height(20.dp))
+                } else {
                     EmptyState(
-                        title = "Suggestions ready",
-                        message = "ImageSorter produced ${uiState.suggestions.size} suggestions. Open Results to review and move images in batches.",
+                        title = stringResource(R.string.analysis_done_title),
+                        message = stringResource(R.string.analysis_done_message, uiState.suggestions.size),
                         illustrationRes = R.drawable.illus_all_clean,
-                        actionLabel = "Open results",
+                        actionLabel = stringResource(R.string.analysis_open_results),
                         onAction = onNavigateToResults
                     )
                 }

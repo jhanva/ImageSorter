@@ -13,6 +13,7 @@ import com.smartfolder.domain.repository.SuggestionRepository
 import com.smartfolder.domain.usecase.GetSuggestionsUseCase
 import com.smartfolder.domain.usecase.LoadSuggestionsUseCase
 import com.smartfolder.domain.usecase.MoveImagesUseCase
+import com.smartfolder.domain.usecase.UndoMoveUseCase
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +26,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -35,6 +37,7 @@ class ResultsViewModelTest {
 
     private lateinit var getSuggestionsUseCase: GetSuggestionsUseCase
     private lateinit var moveImagesUseCase: MoveImagesUseCase
+    private lateinit var undoMoveUseCase: UndoMoveUseCase
     private lateinit var folderRepository: FolderRepository
     private lateinit var loadSuggestionsUseCase: LoadSuggestionsUseCase
     private lateinit var suggestionRepository: SuggestionRepository
@@ -70,25 +73,29 @@ class ResultsViewModelTest {
     fun setup() {
         getSuggestionsUseCase = GetSuggestionsUseCase()
         moveImagesUseCase = mock(MoveImagesUseCase::class.java)
+        undoMoveUseCase = mock(UndoMoveUseCase::class.java)
         folderRepository = mock(FolderRepository::class.java)
         loadSuggestionsUseCase = mock(LoadSuggestionsUseCase::class.java)
         suggestionRepository = mock(SuggestionRepository::class.java)
         settingsRepository = FakeSettingsRepository()
     }
 
+    private fun viewModel(): ResultsViewModel = ResultsViewModel(
+        getSuggestionsUseCase = getSuggestionsUseCase,
+        moveImagesUseCase = moveImagesUseCase,
+        undoMoveUseCase = undoMoveUseCase,
+        folderRepository = folderRepository,
+        settingsRepository = settingsRepository,
+        loadSuggestionsUseCase = loadSuggestionsUseCase,
+        suggestionRepository = suggestionRepository
+    )
+
     @Test
     fun `groups loaded suggestions by suggested destination`() = runTest(mainDispatcherRule.dispatcher) {
         `when`(loadSuggestionsUseCase.invoke()).thenReturn(listOf(suggestionForA, suggestionForB))
         `when`(folderRepository.getByRole(FolderRole.DESTINATION)).thenReturn(listOf(destinationA, destinationB))
 
-        val viewModel = ResultsViewModel(
-            getSuggestionsUseCase = getSuggestionsUseCase,
-            moveImagesUseCase = moveImagesUseCase,
-            folderRepository = folderRepository,
-            settingsRepository = settingsRepository,
-            loadSuggestionsUseCase = loadSuggestionsUseCase,
-            suggestionRepository = suggestionRepository
-        )
+        val viewModel = viewModel()
 
         val state = awaitState(viewModel) {
             it.destinationSections.size == 2 && it.filteredSuggestions.size == 2
@@ -114,18 +121,15 @@ class ResultsViewModelTest {
                 copiedOnly = 0,
                 failed = 0,
                 errors = emptyList(),
-                movedImageIds = setOf(suggestionForA.image.id, suggestionForB.image.id)
+                movedImageIds = setOf(suggestionForA.image.id, suggestionForB.image.id),
+                movedEntries = listOf(
+                    MoveImagesUseCase.MovedEntry(suggestionForA.image, mock(Uri::class.java)),
+                    MoveImagesUseCase.MovedEntry(suggestionForB.image, mock(Uri::class.java))
+                )
             )
         )
 
-        val viewModel = ResultsViewModel(
-            getSuggestionsUseCase = getSuggestionsUseCase,
-            moveImagesUseCase = moveImagesUseCase,
-            folderRepository = folderRepository,
-            settingsRepository = settingsRepository,
-            loadSuggestionsUseCase = loadSuggestionsUseCase,
-            suggestionRepository = suggestionRepository
-        )
+        val viewModel = viewModel()
 
         awaitState(viewModel) { it.filteredSuggestions.size == 2 }
         viewModel.toggleSelection(1L)
@@ -135,7 +139,106 @@ class ResultsViewModelTest {
 
         val state = awaitState(viewModel) { it.filteredSuggestions.isEmpty() && !it.isMoving }
         assertTrue(state.selectedIds.isEmpty())
-        assertEquals("Moved: 2", state.moveResultMessage)
+        assertEquals(2, state.moveSummary?.moved)
+        assertEquals(0, state.moveSummary?.failed)
+        assertTrue(state.canUndo)
+    }
+
+    @Test
+    fun `undo last move restores review state`() = runTest(mainDispatcherRule.dispatcher) {
+        `when`(loadSuggestionsUseCase.invoke()).thenReturn(listOf(suggestionForA))
+        `when`(folderRepository.getByRole(FolderRole.DESTINATION)).thenReturn(listOf(destinationA))
+        val movedUri = mock(Uri::class.java)
+        `when`(
+            moveImagesUseCase.invoke(listOf(suggestionForA.image), destinationA.uri)
+        ).thenReturn(
+            MoveImagesUseCase.MoveReport(
+                moved = 1,
+                copiedOnly = 0,
+                failed = 0,
+                errors = emptyList(),
+                movedImageIds = setOf(suggestionForA.image.id),
+                movedEntries = listOf(MoveImagesUseCase.MovedEntry(suggestionForA.image, movedUri))
+            )
+        )
+        `when`(undoMoveUseCase.invoke(anyBatch()))
+            .thenReturn(UndoMoveUseCase.UndoReport(restored = 1, failed = 0, errors = emptyList()))
+
+        val viewModel = viewModel()
+
+        awaitState(viewModel) { it.filteredSuggestions.size == 1 }
+        viewModel.toggleSelection(1L)
+        viewModel.moveSelected()
+        awaitState(viewModel) { it.canUndo }
+
+        viewModel.undoLastMove()
+        val state = awaitState(viewModel) { !it.canUndo && !it.isMoving }
+
+        verify(undoMoveUseCase).invoke(anyBatch())
+        assertFalse(state.canUndo)
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun anyBatch(): UndoMoveUseCase.UndoBatch {
+        org.mockito.Mockito.any(UndoMoveUseCase.UndoBatch::class.java)
+        return UndoMoveUseCase.UndoBatch(emptyList(), emptyList())
+    }
+
+    @Test
+    fun `selectHighConfidence selects only assigned suggestions with clear margin`() = runTest(mainDispatcherRule.dispatcher) {
+        val confident = suggestion(
+            id = 1L, name = "confident.png", score = 0.92f, destinationId = destinationA.id,
+            secondBestScore = 0.60f
+        )
+        val ambiguous = suggestion(
+            id = 2L, name = "ambiguous.png", score = 0.95f, destinationId = destinationA.id,
+            secondBestScore = 0.93f
+        )
+        val unassigned = suggestion(
+            id = 3L, name = "unassigned.png", score = 0.90f, destinationId = 0L,
+            secondBestScore = 0.50f
+        )
+        `when`(loadSuggestionsUseCase.invoke()).thenReturn(listOf(confident, ambiguous, unassigned))
+        `when`(folderRepository.getByRole(FolderRole.DESTINATION)).thenReturn(listOf(destinationA))
+
+        val viewModel = viewModel()
+
+        awaitState(viewModel) { it.filteredSuggestions.size == 3 }
+        viewModel.selectHighConfidence()
+
+        val state = awaitState(viewModel) { it.selectedIds.isNotEmpty() }
+        assertEquals(setOf(1L), state.selectedIds)
+    }
+
+    @Test
+    fun `toggleSection collapses and expands a destination group`() = runTest(mainDispatcherRule.dispatcher) {
+        `when`(loadSuggestionsUseCase.invoke()).thenReturn(listOf(suggestionForA))
+        `when`(folderRepository.getByRole(FolderRole.DESTINATION)).thenReturn(listOf(destinationA))
+
+        val viewModel = viewModel()
+
+        awaitState(viewModel) { it.filteredSuggestions.size == 1 }
+        assertTrue(viewModel.uiState.value.collapsedSectionIds.isEmpty())
+
+        viewModel.toggleSection(destinationA.id)
+        assertTrue(destinationA.id in viewModel.uiState.value.collapsedSectionIds)
+
+        viewModel.toggleSection(destinationA.id)
+        assertFalse(destinationA.id in viewModel.uiState.value.collapsedSectionIds)
+    }
+
+    @Test
+    fun `selectAllInSection selects every suggestion of that destination only`() = runTest(mainDispatcherRule.dispatcher) {
+        `when`(loadSuggestionsUseCase.invoke()).thenReturn(listOf(suggestionForA, suggestionForB))
+        `when`(folderRepository.getByRole(FolderRole.DESTINATION)).thenReturn(listOf(destinationA, destinationB))
+
+        val viewModel = viewModel()
+
+        awaitState(viewModel) { it.filteredSuggestions.size == 2 }
+        viewModel.selectAllInSection(destinationA.id)
+
+        val state = awaitState(viewModel) { it.selectedIds.isNotEmpty() }
+        assertEquals(setOf(1L), state.selectedIds)
     }
 
     @Test
@@ -143,14 +246,7 @@ class ResultsViewModelTest {
         `when`(loadSuggestionsUseCase.invoke()).thenReturn(listOf(suggestionForA, suggestionForB))
         `when`(folderRepository.getByRole(FolderRole.DESTINATION)).thenReturn(listOf(destinationA, destinationB))
 
-        val viewModel = ResultsViewModel(
-            getSuggestionsUseCase = getSuggestionsUseCase,
-            moveImagesUseCase = moveImagesUseCase,
-            folderRepository = folderRepository,
-            settingsRepository = settingsRepository,
-            loadSuggestionsUseCase = loadSuggestionsUseCase,
-            suggestionRepository = suggestionRepository
-        )
+        val viewModel = viewModel()
 
         awaitState(viewModel) { it.filteredSuggestions.size == 2 }
         viewModel.toggleSelection(2L)
@@ -174,18 +270,11 @@ class ResultsViewModelTest {
         `when`(loadSuggestionsUseCase.invoke()).thenReturn(listOf(unassigned))
         `when`(folderRepository.getByRole(FolderRole.DESTINATION)).thenReturn(listOf(destinationA, destinationB))
 
-        val viewModel = ResultsViewModel(
-            getSuggestionsUseCase = getSuggestionsUseCase,
-            moveImagesUseCase = moveImagesUseCase,
-            folderRepository = folderRepository,
-            settingsRepository = settingsRepository,
-            loadSuggestionsUseCase = loadSuggestionsUseCase,
-            suggestionRepository = suggestionRepository
-        )
+        val viewModel = viewModel()
 
         val state = awaitState(viewModel) { it.destinationSections.size == 1 }
 
-        assertEquals("Needs manual routing", state.destinationSections.single().destination.displayName)
+        assertEquals(0L, state.destinationSections.single().destination.id)
         assertEquals(listOf(3L), state.destinationSections.single().suggestions.map { it.image.id })
     }
 
@@ -208,7 +297,8 @@ class ResultsViewModelTest {
         id: Long,
         name: String,
         score: Float,
-        destinationId: Long
+        destinationId: Long,
+        secondBestScore: Float = score - 0.1f
     ): SuggestionItem {
         return SuggestionItem(
             image = ImageInfo(
@@ -222,7 +312,7 @@ class ResultsViewModelTest {
             ),
             suggestedDestinationId = destinationId,
             score = score,
-            secondBestScore = score - 0.1f,
+            secondBestScore = secondBestScore,
             centroidScore = score,
             topKScore = score,
             topSimilarImages = emptyList()
@@ -231,9 +321,10 @@ class ResultsViewModelTest {
 
     private class FakeSettingsRepository : SettingsRepository {
         override val threshold: Flow<Float> = MutableStateFlow(0.80f)
-        override val modelChoice: Flow<ModelChoice> = flowOf(ModelChoice.FAST)
+        override val modelChoice: Flow<ModelChoice> = flowOf(ModelChoice.DEFAULT)
         override val executionProfile: Flow<ExecutionProfile> = flowOf(ExecutionProfile.BALANCED)
         override val darkMode: Flow<Boolean> = flowOf(false)
+        override val dynamicColor: Flow<Boolean> = flowOf(false)
 
         override suspend fun setThreshold(value: Float) = Unit
 
@@ -242,5 +333,7 @@ class ResultsViewModelTest {
         override suspend fun setExecutionProfile(profile: ExecutionProfile) = Unit
 
         override suspend fun setDarkMode(enabled: Boolean) = Unit
+
+        override suspend fun setDynamicColor(enabled: Boolean) = Unit
     }
 }

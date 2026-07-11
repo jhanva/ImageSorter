@@ -42,6 +42,8 @@ class SuggestionRepositoryImpl @Inject constructor(
         topKScore = topKScore,
         topSimilarIds = parseLongList(topSimilarIds),
         topSimilarScores = parseFloatList(topSimilarScores),
+        candidateIds = parseLongList(candidateIds),
+        candidateScores = parseFloatList(candidateScores),
         createdAt = createdAt
     )
 
@@ -54,6 +56,8 @@ class SuggestionRepositoryImpl @Inject constructor(
         topKScore = topKScore,
         topSimilarIds = topSimilarIds.joinToString(","),
         topSimilarScores = topSimilarScores.joinToString(","),
+        candidateIds = candidateIds.joinToString(","),
+        candidateScores = candidateScores.joinToString(","),
         createdAt = createdAt
     )
 

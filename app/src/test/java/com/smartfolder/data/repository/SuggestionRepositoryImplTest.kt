@@ -24,6 +24,8 @@ class SuggestionRepositoryImplTest {
                 topKScore = 0.95f,
                 topSimilarIds = listOf(2L, 3L),
                 topSimilarScores = listOf(0.98f, 0.96f),
+                candidateIds = listOf(100L, 101L),
+                candidateScores = listOf(0.9f, 0.55f),
                 createdAt = 123L
             ),
             StoredSuggestion(
@@ -46,6 +48,9 @@ class SuggestionRepositoryImplTest {
         assertEquals(input[0].destinationFolderId, output[0].destinationFolderId)
         assertEquals(input[0].secondBestScore, output[0].secondBestScore, 0.0001f)
         assertEquals(input[0].topSimilarIds, output[0].topSimilarIds)
+        assertEquals(input[0].candidateIds, output[0].candidateIds)
+        assertEquals(input[0].candidateScores, output[0].candidateScores)
+        assertEquals(input[1].candidateIds, output[1].candidateIds)
         assertEquals(input[1].destinationFolderId, output[1].destinationFolderId)
         assertEquals(input[1].secondBestScore, output[1].secondBestScore, 0.0001f)
     }

@@ -32,6 +32,7 @@ class AnalyzeImagesUseCase @Inject constructor(
     companion object {
         private const val MAX_ANALYSIS_WORKERS = 6
         private const val SUGGESTION_BATCH_SIZE = 500
+        private const val MAX_STORED_CANDIDATES = 3
     }
 
     data class Result(
@@ -62,7 +63,9 @@ class AnalyzeImagesUseCase @Inject constructor(
         val imageId: Long,
         val assignedDestinationId: Long,
         val best: DestinationCandidate?,
-        val secondBestScore: Float
+        val secondBestScore: Float,
+        val candidateIds: List<Long> = emptyList(),
+        val candidateScores: List<Float> = emptyList()
     )
 
     operator fun invoke(
@@ -227,7 +230,9 @@ class AnalyzeImagesUseCase @Inject constructor(
                     secondBestScore = stored.secondBestScore,
                     centroidScore = stored.centroidScore,
                     topKScore = stored.topKScore,
-                    topSimilarImages = topSimilarImages
+                    topSimilarImages = topSimilarImages,
+                    candidateIds = stored.candidateIds,
+                    candidateScores = stored.candidateScores
                 )
             }.sortedWith(compareByDescending<SuggestionItem> { it.score }.thenByDescending { it.confidenceMargin })
 
@@ -259,6 +264,8 @@ class AnalyzeImagesUseCase @Inject constructor(
                 topSimilarScores = suggestion.best?.let { b ->
                     (0 until b.topKSize).map { b.topSimilarScores[it] }
                 } ?: emptyList(),
+                candidateIds = suggestion.candidateIds,
+                candidateScores = suggestion.candidateScores,
                 createdAt = createdAt
             )
         }
@@ -305,7 +312,8 @@ class AnalyzeImagesUseCase @Inject constructor(
                 centroidScore = centroidScore,
                 topKMean = topKMean,
                 topKMax = topKMax,
-                referenceSupport = referenceSupport
+                referenceSupport = referenceSupport,
+                referenceCount = destination.count
             )
             DestinationCandidate(
                 destinationFolderId = destination.folderId,
@@ -326,12 +334,15 @@ class AnalyzeImagesUseCase @Inject constructor(
                 secondBestScore = 0f
             )
         val secondBestScore = rankedCandidates.getOrNull(1)?.score ?: 0f
+        val topCandidates = rankedCandidates.take(MAX_STORED_CANDIDATES)
 
         return SourceSuggestion(
             imageId = imageId,
             assignedDestinationId = if (best.score >= threshold) best.destinationFolderId else 0L,
             best = best,
-            secondBestScore = secondBestScore
+            secondBestScore = secondBestScore,
+            candidateIds = topCandidates.map { it.destinationFolderId },
+            candidateScores = topCandidates.map { it.score }
         )
     }
 

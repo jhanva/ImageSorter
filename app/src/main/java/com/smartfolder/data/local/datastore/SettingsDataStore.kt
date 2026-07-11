@@ -27,6 +27,7 @@ class SettingsDataStore @Inject constructor(
         val MODEL_CHOICE = stringPreferencesKey("model_choice")
         val EXECUTION_PROFILE = stringPreferencesKey("execution_profile")
         val DARK_MODE = booleanPreferencesKey("dark_mode")
+        val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
     }
 
     val threshold: Flow<Float> = context.dataStore.data.map { prefs ->
@@ -34,11 +35,11 @@ class SettingsDataStore @Inject constructor(
     }
 
     val modelChoice: Flow<ModelChoice> = context.dataStore.data.map { prefs ->
-        val name = prefs[Keys.MODEL_CHOICE] ?: ModelChoice.FAST.name
+        val name = prefs[Keys.MODEL_CHOICE] ?: ModelChoice.DEFAULT.name
         try {
             ModelChoice.valueOf(name)
         } catch (e: IllegalArgumentException) {
-            ModelChoice.FAST
+            ModelChoice.DEFAULT
         }
     }
 
@@ -53,6 +54,10 @@ class SettingsDataStore @Inject constructor(
 
     val darkMode: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[Keys.DARK_MODE] ?: false
+    }
+
+    val dynamicColor: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[Keys.DYNAMIC_COLOR] ?: false
     }
 
     suspend fun setThreshold(value: Float) {
@@ -76,6 +81,12 @@ class SettingsDataStore @Inject constructor(
     suspend fun setDarkMode(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[Keys.DARK_MODE] = enabled
+        }
+    }
+
+    suspend fun setDynamicColor(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.DYNAMIC_COLOR] = enabled
         }
     }
 

@@ -29,6 +29,11 @@ fun NavGraph(
                 onNavigateToAnalysis = {
                     navController.navigate(Screen.Analysis.route)
                 },
+                onNavigateToResults = {
+                    navController.navigate(Screen.Results.route) {
+                        launchSingleTop = true
+                    }
+                },
                 onNavigateToSettings = {
                     navController.navigate(Screen.Settings.route)
                 }

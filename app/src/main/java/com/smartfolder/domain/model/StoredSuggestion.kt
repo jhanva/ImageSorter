@@ -9,5 +9,7 @@ data class StoredSuggestion(
     val topKScore: Float,
     val topSimilarIds: List<Long>,
     val topSimilarScores: List<Float>,
+    val candidateIds: List<Long> = emptyList(),
+    val candidateScores: List<Float> = emptyList(),
     val createdAt: Long
 )

@@ -1,13 +1,14 @@
 package com.smartfolder.presentation.screens.settings
 
+import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
@@ -32,11 +33,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.smartfolder.R
+import com.smartfolder.domain.model.ModelChoice
 import com.smartfolder.presentation.components.ExecutionProfileSelector
 import com.smartfolder.presentation.components.ModelSelector
 import com.smartfolder.presentation.components.ThresholdSlider
-import com.smartfolder.domain.model.ModelChoice
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,8 +55,8 @@ fun SettingsScreen(
     if (showClearConfirmation) {
         AlertDialog(
             onDismissRequest = { showClearConfirmation = false },
-            title = { Text("Clear All Cache") },
-            text = { Text("This will delete all indexed folders, embeddings, and decisions. This action cannot be undone.") },
+            title = { Text(stringResource(R.string.settings_clear_cache_title)) },
+            text = { Text(stringResource(R.string.settings_clear_cache_message)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -61,12 +64,15 @@ fun SettingsScreen(
                         viewModel.clearCache()
                     }
                 ) {
-                    Text("Clear", color = MaterialTheme.colorScheme.error)
+                    Text(
+                        text = stringResource(R.string.settings_clear_confirm),
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showClearConfirmation = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         )
@@ -75,10 +81,13 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text(stringResource(R.string.settings_title)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_back)
+                        )
                     }
                 }
             )
@@ -88,11 +97,16 @@ fun SettingsScreen(
                 Snackbar(
                     action = {
                         TextButton(onClick = { viewModel.dismissMessage() }) {
-                            Text("Dismiss")
+                            Text(stringResource(R.string.action_dismiss))
                         }
                     }
                 ) {
-                    Text(message)
+                    Text(
+                        text = when (message) {
+                            SettingsMessage.CACHE_CLEARED -> stringResource(R.string.settings_cache_cleared)
+                            SettingsMessage.CACHE_FAILED -> stringResource(R.string.settings_cache_failed)
+                        }
+                    )
                 }
             }
         }
@@ -101,12 +115,12 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // Threshold
             Text(
-                text = "Default Threshold",
+                text = stringResource(R.string.settings_threshold_title),
                 style = MaterialTheme.typography.titleMedium
             )
             ThresholdSlider(
@@ -114,10 +128,14 @@ fun SettingsScreen(
                 onValueChange = { viewModel.setThreshold(it) }
             )
 
-            // Model choice
             Text(
-                text = "Embedding Model",
+                text = stringResource(R.string.settings_model_title),
                 style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = stringResource(R.string.settings_model_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             ModelSelector(
                 selected = uiState.modelChoice,
@@ -125,9 +143,8 @@ fun SettingsScreen(
                 availableModels = availableModels
             )
 
-            // Execution profile
             Text(
-                text = "Execution Profile",
+                text = stringResource(R.string.settings_profile_title),
                 style = MaterialTheme.typography.titleMedium
             )
             ExecutionProfileSelector(
@@ -135,15 +152,34 @@ fun SettingsScreen(
                 onSelected = { viewModel.setExecutionProfile(it) }
             )
 
-            // Dark mode
+            Text(
+                text = stringResource(R.string.settings_appearance_title),
+                style = MaterialTheme.typography.titleMedium
+            )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.settings_dynamic_color),
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Switch(
+                        checked = uiState.dynamicColor,
+                        onCheckedChange = { viewModel.setDynamicColor(it) }
+                    )
+                }
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Dark Mode",
-                    style = MaterialTheme.typography.titleMedium
+                    text = stringResource(R.string.settings_dark_mode),
+                    style = MaterialTheme.typography.bodyLarge
                 )
                 Switch(
                     checked = uiState.darkMode,
@@ -151,7 +187,6 @@ fun SettingsScreen(
                 )
             }
 
-            // Clear cache
             Button(
                 onClick = { showClearConfirmation = true },
                 enabled = !uiState.isClearingCache,
@@ -166,7 +201,7 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onError
                     )
                 }
-                Text("Clear All Cache")
+                Text(stringResource(R.string.settings_clear_cache))
             }
         }
     }

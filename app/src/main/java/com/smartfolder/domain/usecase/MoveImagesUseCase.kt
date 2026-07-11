@@ -14,12 +14,18 @@ class MoveImagesUseCase @Inject constructor(
     private val imageRepository: ImageRepository,
     private val transactionRunner: TransactionRunner
 ) {
+    data class MovedEntry(
+        val image: ImageInfo,
+        val newUri: Uri
+    )
+
     data class MoveReport(
         val moved: Int,
         val copiedOnly: Int,
         val failed: Int,
         val errors: List<String>,
-        val movedImageIds: Set<Long>
+        val movedImageIds: Set<Long>,
+        val movedEntries: List<MovedEntry> = emptyList()
     )
 
     suspend operator fun invoke(
@@ -31,6 +37,7 @@ class MoveImagesUseCase @Inject constructor(
         var failed = 0
         val errors = mutableListOf<String>()
         val movedImageIds = mutableSetOf<Long>()
+        val movedEntries = mutableListOf<MovedEntry>()
 
         for (image in images) {
             yield()
@@ -49,11 +56,13 @@ class MoveImagesUseCase @Inject constructor(
                         }
                         moved++
                         movedImageIds.add(image.id)
+                        movedEntries.add(MovedEntry(image = image, newUri = result.newUri))
                     } catch (e: Exception) {
                         // File was moved but DB delete failed; count as moved
                         // but log error so user knows DB is inconsistent
                         moved++
                         movedImageIds.add(image.id)
+                        movedEntries.add(MovedEntry(image = image, newUri = result.newUri))
                         errors.add("${image.displayName}: moved but DB cleanup failed")
                     }
                 }
@@ -73,7 +82,8 @@ class MoveImagesUseCase @Inject constructor(
             copiedOnly = copiedOnly,
             failed = failed,
             errors = errors,
-            movedImageIds = movedImageIds
+            movedImageIds = movedImageIds,
+            movedEntries = movedEntries
         )
     }
 }

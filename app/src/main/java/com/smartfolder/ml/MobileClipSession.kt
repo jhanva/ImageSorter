@@ -25,7 +25,16 @@ internal class MobileClipSession private constructor(
         private val MEAN = floatArrayOf(0.48145466f, 0.4578275f, 0.40821073f)
         private val STD = floatArrayOf(0.26862954f, 0.26130258f, 0.27577711f)
 
-        suspend fun create(context: Context, modelFileName: String): MobileClipSession =
+        fun resolveInputSize(shape: LongArray?, fallback: Int): Int {
+            val size = shape?.lastOrNull()?.toInt() ?: return fallback
+            return if (size > 0) size else fallback
+        }
+
+        suspend fun create(
+            context: Context,
+            modelFileName: String,
+            fallbackInputSize: Int = 256
+        ): MobileClipSession =
             withContext(Dispatchers.IO) {
                 val assetPath = "models/$modelFileName"
                 val available = context.assets.list("models")?.contains(modelFileName) == true
@@ -49,7 +58,7 @@ internal class MobileClipSession private constructor(
                     ?.info
                     ?.let { it as? ai.onnxruntime.TensorInfo }
                     ?.shape
-                val inputSize = inputShape?.lastOrNull()?.toInt() ?: 256
+                val inputSize = resolveInputSize(inputShape, fallbackInputSize)
                 MobileClipSession(env, session, inputName, inputSize)
             }
     }

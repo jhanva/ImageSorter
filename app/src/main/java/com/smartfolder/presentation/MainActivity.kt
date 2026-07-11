@@ -27,7 +27,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             val darkMode by settingsRepository.darkMode.collectAsState(initial = false)
-            SmartFolderTheme(darkTheme = darkMode) {
+            val dynamicColor by settingsRepository.dynamicColor.collectAsState(initial = false)
+            SmartFolderTheme(darkTheme = darkMode, dynamicColor = dynamicColor) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background

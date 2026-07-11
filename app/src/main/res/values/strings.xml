@@ -1,3 +1,122 @@
 <resources>
     <string name="app_name">Image Sorter</string>
+
+    <!-- Common -->
+    <string name="action_back">Back</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_close">Close</string>
+    <string name="action_dismiss">Dismiss</string>
+    <string name="action_remove">Remove</string>
+    <string name="action_retry">Retry</string>
+    <string name="action_settings">Settings</string>
+    <string name="action_undo">Undo</string>
+
+    <!-- Home -->
+    <string name="home_subtitle">Offline image routing for anime and game art</string>
+    <string name="hero_setup_title">Set up your sorter</string>
+    <string name="hero_setup_subtitle">Add destination folders (your organized categories) and source folders (the unsorted ones).</string>
+    <string name="hero_indexing_title">Indexing folders</string>
+    <string name="hero_indexing_subtitle">Keep the app open while local embeddings are built.</string>
+    <string name="hero_ready_title">Ready to sort</string>
+    <string name="hero_ready_subtitle">Analyze indexes anything pending and suggests a folder for every image.</string>
+    <string name="hero_steps">%1$d of %2$d steps complete</string>
+    <string name="action_choose_folders">Choose folders</string>
+    <string name="action_analyze">Analyze</string>
+    <string name="action_indexing">Indexing…</string>
+    <string name="action_continue_review">Continue review (%1$d pending)</string>
+    <string name="home_destinations_title">Destinations</string>
+    <string name="home_destinations_empty">Add the folders you want images routed into.</string>
+    <string name="home_sources_title">Sources</string>
+    <string name="home_sources_empty">Add one or more folders with unsorted images.</string>
+    <string name="home_add_folder">Add folder</string>
+    <string name="folder_indexed_count">%1$d/%2$d indexed</string>
+    <string name="folder_image_count">%1$d images</string>
+    <string name="menu_reindex">Re-index</string>
+    <string name="menu_remove">Remove</string>
+    <string name="remove_folder_title">Remove folder?</string>
+    <string name="remove_folder_message">"%1$s" will be removed from the app. No files are deleted from the device.</string>
+    <string name="folder_options">Folder options</string>
+
+    <!-- Folder picker sheet -->
+    <string name="sheet_title">Choose an image folder</string>
+    <string name="sheet_subtitle">Folders come from the device media index.</string>
+    <string name="sheet_loading">Loading folders…</string>
+    <string name="sheet_empty_title">No image folders found</string>
+    <string name="sheet_empty_message">Grant image access and try again.</string>
+    <string name="sheet_use">Use</string>
+
+    <!-- Analysis -->
+    <string name="analysis_title">Analysis</string>
+    <string name="analysis_subtitle">Everything runs locally on this device</string>
+    <string name="analysis_phase_preparing">Preparing analysis</string>
+    <string name="analysis_phase_indexing_destinations">Indexing destinations</string>
+    <string name="analysis_phase_indexing_sources">Indexing sources</string>
+    <string name="analysis_phase_centroid">Preparing folder fingerprints</string>
+    <string name="analysis_phase_comparing">Comparing images</string>
+    <string name="analysis_phase_complete">Analysis complete</string>
+    <string name="analysis_phase_stopped">Analysis stopped</string>
+    <string name="analysis_progress_count">%1$d of %2$d processed</string>
+    <string name="analysis_progress_preparing">Preparing local work</string>
+    <string name="analysis_cancel_title">Cancel analysis</string>
+    <string name="analysis_cancel_message">Progress will be lost. Cancel the current analysis?</string>
+    <string name="analysis_cancel_confirm">Cancel analysis</string>
+    <string name="analysis_cancel_continue">Continue</string>
+    <string name="analysis_go_back">Go back</string>
+    <string name="analysis_done_title">Suggestions ready</string>
+    <string name="analysis_done_message">%1$d suggestions were generated. Review them and move images in batches.</string>
+    <string name="analysis_open_results">Open results</string>
+
+    <!-- Results -->
+    <string name="results_title">Review</string>
+    <string name="results_subtitle">%1$d visible suggestions</string>
+    <string name="results_groups_count">%1$d groups</string>
+    <string name="results_unassigned_count">%1$d unassigned</string>
+    <string name="results_selected_count">%1$d selected</string>
+    <string name="results_threshold_label">Similarity threshold: %1$d%%</string>
+    <string name="results_select_confident">Select high confidence</string>
+    <string name="results_clear_selection">Clear selection</string>
+    <string name="results_section_images">%1$d images</string>
+    <string name="results_section_select_all">Select all</string>
+    <string name="results_unassigned_section">Unassigned</string>
+    <string name="results_move_selected">Move %1$d selected</string>
+    <string name="results_match_label">Match</string>
+    <string name="results_margin_label">Margin</string>
+    <string name="results_possible_duplicate">Possible duplicate</string>
+    <string name="results_choose_destination">Choose destination</string>
+    <string name="results_change_destination">Change</string>
+    <string name="results_moved_summary">Moved: %1$d</string>
+    <string name="results_moved_summary_detailed">Moved: %1$d, Copied: %2$d, Failed: %3$d</string>
+    <string name="results_restored_summary">Restored: %1$d</string>
+    <string name="results_empty_title">No suggestions yet</string>
+    <string name="results_empty_message">Run an analysis to generate destination suggestions.</string>
+    <string name="results_empty_filtered_title">Nothing above the current threshold</string>
+    <string name="results_empty_filtered_message">Lower the threshold to review weaker matches.</string>
+    <string name="results_write_denied">Write permission denied. Could not move the selected images.</string>
+    <string name="results_write_request_failed">Could not request write permission for the selected images.</string>
+    <string name="results_expand_section">Expand section</string>
+    <string name="results_collapse_section">Collapse section</string>
+    <string name="results_preview">Preview image</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_threshold_title">Default threshold</string>
+    <string name="settings_model_title">Embedding model</string>
+    <string name="settings_model_hint">Semantic understands art style and scenes. Anime specializes in character identity and works best when each folder is one character or series with a single character per image.</string>
+    <string name="model_semantic">Semantic (recommended)</string>
+    <string name="model_anime">Anime (characters)</string>
+    <string name="model_fast">Fast</string>
+    <string name="model_precise">Precise</string>
+    <string name="settings_profile_title">Execution profile</string>
+    <string name="profile_battery">Battery saver</string>
+    <string name="profile_balanced">Balanced</string>
+    <string name="profile_performance">Performance</string>
+    <string name="settings_appearance_title">Appearance</string>
+    <string name="settings_dynamic_color">System colors (Material You)</string>
+    <string name="settings_dark_mode">Dark mode</string>
+    <string name="settings_clear_cache">Clear all cache</string>
+    <string name="settings_clear_cache_title">Clear all cache</string>
+    <string name="settings_clear_cache_message">All indexed folders, embeddings and suggestions will be deleted. This cannot be undone.</string>
+    <string name="settings_clear_confirm">Clear</string>
+    <string name="settings_cache_cleared">Cache cleared</string>
+    <string name="settings_cache_failed">Could not clear the cache</string>
 </resources>

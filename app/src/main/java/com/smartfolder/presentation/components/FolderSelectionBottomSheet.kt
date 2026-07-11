@@ -21,6 +21,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -29,8 +30,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.smartfolder.R
 import com.smartfolder.domain.model.ImageFolderOption
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -52,12 +55,12 @@ fun FolderSelectionBottomSheet(
                 .padding(horizontal = 20.dp, vertical = 8.dp)
         ) {
             Text(
-                text = "Choose an image folder",
+                text = stringResource(R.string.sheet_title),
                 style = MaterialTheme.typography.headlineSmall
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Folders come from MediaStore, so you can pick large libraries quickly without browsing the full tree.",
+                text = stringResource(R.string.sheet_subtitle),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -74,15 +77,15 @@ fun FolderSelectionBottomSheet(
                     ) {
                         CircularProgressIndicator(modifier = Modifier.size(22.dp))
                         Spacer(modifier = Modifier.size(12.dp))
-                        Text("Loading folders...")
+                        Text(stringResource(R.string.sheet_loading))
                     }
                 }
 
                 folders.isEmpty() -> {
                     EmptyState(
-                        title = "No image folders found",
-                        message = "Grant image access and refresh to load device folders.",
-                        illustrationRes = com.smartfolder.R.drawable.illus_no_photos
+                        title = stringResource(R.string.sheet_empty_title),
+                        message = stringResource(R.string.sheet_empty_message),
+                        illustrationRes = R.drawable.illus_no_photos
                     )
                 }
 
@@ -117,7 +120,7 @@ fun FolderSelectionBottomSheet(
                                             )
                                             .padding(12.dp)
                                     ) {
-                                        androidx.compose.material3.Icon(
+                                        Icon(
                                             imageVector = Icons.Default.Folder,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.onSecondaryContainer
@@ -130,13 +133,13 @@ fun FolderSelectionBottomSheet(
                                             style = MaterialTheme.typography.titleMedium
                                         )
                                         Text(
-                                            text = "${folder.imageCount} images available",
+                                            text = stringResource(R.string.folder_image_count, folder.imageCount),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                     Text(
-                                        text = "Use",
+                                        text = stringResource(R.string.sheet_use),
                                         style = MaterialTheme.typography.labelLarge,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.primary
@@ -154,7 +157,7 @@ fun FolderSelectionBottomSheet(
                 onClick = onDismiss,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Close")
+                Text(stringResource(R.string.action_close))
             }
 
             Spacer(modifier = Modifier.height(12.dp))

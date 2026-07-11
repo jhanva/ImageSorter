@@ -32,7 +32,11 @@ class ImageEmbedderWrapper @Inject constructor(
                 mediaPipeSession = MediaPipeImageEmbedderSession.create(context, modelFileName)
             }
             ModelBackend.ONNX_CLIP -> {
-                clipSession = MobileClipSession.create(context, modelFileName)
+                val fallbackInputSize = ModelChoice.entries
+                    .firstOrNull { it.modelFileName == modelFileName }
+                    ?.onnxInputFallback
+                    ?: 256
+                clipSession = MobileClipSession.create(context, modelFileName, fallbackInputSize)
             }
         }
         currentModelFile = modelFileName

@@ -120,4 +120,25 @@ object SimilarityCalculator {
             (TOP_K_MAX_WEIGHT * topKMax) +
             (REFERENCE_SUPPORT_WEIGHT * referenceSupport)
     }
+
+    // With few reference images, referenceSupport is dominated by one or two
+    // matches and stops measuring consensus, so its weight is scaled down and
+    // the remaining weights are renormalized.
+    fun computeScore(
+        centroidScore: Float,
+        topKMean: Float,
+        topKMax: Float,
+        referenceSupport: Float,
+        referenceCount: Int
+    ): Float {
+        val availability = ((referenceCount - 1) / 4f).coerceIn(0f, 1f)
+        val supportWeight = REFERENCE_SUPPORT_WEIGHT * availability
+        val baseWeightSum = CENTROID_WEIGHT + TOP_K_MEAN_WEIGHT + TOP_K_MAX_WEIGHT
+        val scale = (1f - supportWeight) / baseWeightSum
+        return scale * (
+            (CENTROID_WEIGHT * centroidScore) +
+                (TOP_K_MEAN_WEIGHT * topKMean) +
+                (TOP_K_MAX_WEIGHT * topKMax)
+            ) + (supportWeight * referenceSupport)
+    }
 }

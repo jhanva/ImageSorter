@@ -1,50 +1,41 @@
 # ImageSorter
 
-Android app that organizes images into folders using on-device visual similarity. Select a reference folder with sample images, point it at an unsorted folder, and ImageSorter will suggest which images belong together -- all 100% offline with no cloud dependencies.
+Android app that organizes images into folders using on-device visual similarity. Pick one or more destination folders (your organized categories, for example one folder per anime or game), pick one or more source folders (the unsorted ones), and ImageSorter suggests where each image belongs -- all 100% offline with no cloud dependencies.
 
 ## How It Works
 
-ImageSorter supports two operation modes:
+1. Add destination folders (references the model compares against) and source folders (images to route).
+2. Tap Analyze. The app indexes any folder that is missing embeddings for the active model, then compares every source image against every destination folder.
+3. Review the suggestions grouped by destination, adjust anything the model got wrong, and move the accepted images in one batch.
+4. Images below the similarity threshold land in an unassigned group where you can route them manually with one-tap candidate chips.
 
-1. **Model mode (default)**
-   - Select reference folder (A) and unsorted folder (B)
-   - Index both folders
-   - Analyze similarities
-   - Review suggestions one by one and move accepted images to A
-2. **Manual mode**
-   - Select folders A and B
-   - Load all images from B directly (no model scoring required)
-   - Open an assisted offline review screen for B
-   - Search, filter, group, and bulk-pick likely representatives
-   - Move the selected batch to A
-
-During model review, you can stop early and move only what has been accepted so far.
-
-### Manual Assisted Review
-
-Manual mode is designed for cases where the embedding suggestions are not reliable enough.
-
-- Displays the complete contents of folder B in a lazy thumbnail grid suitable for large folders
-- Adds filename search, visible-result filtering, and alternate sort modes
-- Groups images into local time batches and filename-based variant groups
-- Includes quick actions to select all images, clear selection, pick the best image in visible name groups, or pick one lead per visible batch
-- Avoids accidental carry-over selection by trimming selected items to the current visible filter
-- Reuses the same move flow and write-permission prompts already used by the app
-
-Manual mode does not use threshold filtering or similarity scoring in the results screen.
+You can stop the review at any point and move only what has been accepted so far. The last move can be undone.
 
 ### Scoring
 
-In model mode, each unsorted image receives a combined score:
+Each source image is compared against every destination folder:
+
+- Centroid pre-filter: destinations whose centroid similarity is below `threshold * 0.6` are discarded early.
+- For the remaining destinations, the top-K (default 5) most similar reference images are found and combined into a score:
 
 ```
-score = 0.2 * centroidScore + 0.3 * topKMean + 0.5 * topKMax
+score = 0.20 * centroidScore + 0.25 * topKMean + 0.20 * topKMax + 0.35 * referenceSupport
 ```
 
-Additional details:
-- Default `topK = 5`
-- Centroid pre-filter uses `threshold * 0.5`
-- Top similar reference matches are shown alongside each suggestion for visual explanation
+- `referenceSupport` is the mean of the supporting matches after the best hit, which rewards consensus across several references over a single spiky match. Its weight is scaled down for destination folders with very few reference images.
+- The best destination wins if its score passes the threshold; otherwise the image is left unassigned with its closest candidates stored for quick manual routing.
+- The second-best destination score is kept as a confidence margin shown during review.
+
+### Embedding models
+
+| Model | Backend | Best for |
+|-------|---------|----------|
+| Semantic (MobileCLIP-S0) | ONNX Runtime (NNAPI when available) | Anime, game art, illustrations. Default. |
+| Anime (CCIP caformer) | ONNX Runtime | Character identity: folders organized as one character or series per folder, single character per image |
+| Fast (MobileNet V3 Small) | MediaPipe TFLite | Quick passes over photographic content |
+| Precise (MobileNet V3 Large) | MediaPipe TFLite | Photographic content, higher quality |
+
+Embeddings are cached in Room per model and per `contentHash` (file size + last modified), so re-indexing only processes new or changed images.
 
 ## Architecture
 
@@ -57,7 +48,7 @@ Presentation  (Jetpack Compose + ViewModels + StateFlow)
      |
     Data        (Room, DataStore, SAF, Repository implementations)
      |
-     ML         (MediaPipe ImageEmbedder, Similarity, Centroid)
+     ML         (MediaPipe ImageEmbedder / ONNX MobileCLIP, Similarity, Centroid)
 ```
 
 ### Tech Stack
@@ -68,19 +59,18 @@ Presentation  (Jetpack Compose + ViewModels + StateFlow)
 | DI | Hilt (with KSP) |
 | Database | Room |
 | Preferences | DataStore |
-| Background work | WorkManager |
 | Image loading | Coil |
-| ML inference | MediaPipe Tasks Vision |
-| File access | SAF (Storage Access Framework) |
+| ML inference | MediaPipe Tasks Vision + ONNX Runtime |
+| File access | SAF (Storage Access Framework) + MediaStore |
 | Navigation | Navigation Compose |
 
 ### Key Design Decisions
 
-- **MediaStore-driven folder selection** -- The app cannot use `ACTION_OPEN_DOCUMENT_TREE` as its primary folder selection flow. It enumerates image folders from MediaStore, lets the user choose from that indexed list, and then builds the folder URI used by downstream file operations.
+- **MediaStore-driven folder selection** -- The app enumerates image folders from MediaStore and lets the user choose from that indexed list instead of the system document tree picker.
 - **ContentResolver queries** -- Folder listing uses `DocumentsContract` queries instead of `DocumentFile.listFiles()` for 10-100x faster enumeration of large folders.
-- **MediaStore-first listing for folder analysis/indexing** -- Uses `documentId`-based MediaStore lookup first, with SAF fallback for compatibility.
-- **GPU with CPU fallback** -- MediaPipe attempts GPU delegate first, falls back to CPU automatically.
-- **Incremental indexing** -- Embeddings are cached in Room keyed by `contentHash` (file size + last modified). Only changed or new images are re-processed.
+- **One-tap pipeline** -- Analyze automatically indexes any folder that is missing embeddings for the active model before comparing, so there is no separate manual indexing step.
+- **GPU/NNAPI with CPU fallback** -- Accelerated delegates are attempted first and fall back to CPU automatically.
+- **Incremental indexing** -- Embeddings cached in Room keyed by `contentHash`; stale rows for deleted files are cleaned up on each pass.
 - **Batch operations** -- Image registration and embedding lookups use chunked batch queries to minimize database round-trips.
 - **TransactionRunner** -- Cross-repository atomic operations via an injectable interface, keeping domain layer independent of Room.
 
@@ -88,29 +78,29 @@ Presentation  (Jetpack Compose + ViewModels + StateFlow)
 
 ```
 app/src/main/java/com/smartfolder/
-  SmartFolderApp.kt              Application class (Hilt + WorkManager)
+  SmartFolderApp.kt              Application class (Hilt)
   di/                            Hilt modules
   data/
     local/db/                    Room database, DAOs, entities
     local/datastore/             DataStore preferences
+    media/                       MediaStore folder provider
     repository/                  Repository implementations
     saf/                         SAF file operations
   domain/
     model/                       Domain models
     repository/                  Repository interfaces
     usecase/                     Business logic
-  ml/                            ML pipeline (embedder, similarity, centroid)
-  worker/                        WorkManager workers
+  ml/                            ML pipeline (embedders, similarity, centroid)
   presentation/
     MainActivity.kt              Entry point
     navigation/                  NavGraph + Screen routes
-    theme/                       Material 3 theme
+    theme/                       Material 3 theme (brand palette + dynamic color)
     components/                  Reusable Compose components
     screens/
-      home/                      Folder selection + indexing
-      analysis/                  Analysis progress
-      results/                   Model review or manual batch selection + move images
-      settings/                  Threshold, model, execution profile, manual mode, dark mode
+      home/                      Folder selection + one-tap analyze
+      analysis/                  Indexing + analysis progress
+      results/                   Grouped review, quick selection, move + undo
+      settings/                  Threshold, model, execution profile, appearance
 ```
 
 ## Building
@@ -127,22 +117,14 @@ app/src/main/java/com/smartfolder/
 ./gradlew assembleDebug
 ```
 
-ML models (MobileNet V3 small and large) are downloaded automatically during the first build via a Gradle task hooked into `preBuild`. The download includes retry logic, timeouts, and file size validation.
+ML models (MobileNet V3 small/large and MobileCLIP-S0) are downloaded automatically during the first build via a Gradle task hooked into `preBuild`, with retry logic, timeouts, and file size validation.
 
 ## Versioning And Releases
 
 - Canonical app version lives in `version.properties`.
 - Local or CI builds can override it with `VERSION_NAME` and `VERSION_CODE` as environment variables or Gradle properties.
-- Pushing a Git tag like `v0.2.0` triggers the GitHub Actions workflow in `.github/workflows/release.yml`.
-- Each tagged build publishes a GitHub Release with the debug APK, the release APK, and `SHA256SUMS.txt`.
-- If repository secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEY_ALIAS`, `ANDROID_KEYSTORE_PASSWORD`, and `ANDROID_KEY_PASSWORD` are configured, the workflow signs the release APK before publishing it.
-
-Example:
-
-```bash
-git tag v0.2.0
-git push origin v0.2.0
-```
+- Pushing a Git tag like `v0.3.0` triggers the GitHub Actions workflow in `.github/workflows/release.yml`, which publishes debug and release APKs plus `SHA256SUMS.txt`.
+- If the signing secrets are configured, the workflow signs the release APK before publishing it.
 
 ### Tests
 
@@ -154,20 +136,6 @@ git push origin v0.2.0
 ./gradlew connectedAndroidTest
 ```
 
-Unit tests cover:
-- `SimilarityCalculator` -- cosine similarity and scoring
-- `CentroidCalculator` -- centroid computation and normalization
-- `EmbeddingNormalizer` -- L2 normalization
-- `IndexFolderUseCase` -- indexing pipeline
-- `AnalyzeImagesUseCase` -- analysis pipeline
-- `MoveImagesUseCase` -- file move operations
-- `DestinationNameResolver` -- collision-safe destination naming during SAF copy fallback
-- `ResultsViewModel` -- manual batch selection state and selected-image resolution
-
-Instrumented tests cover:
-- `FolderDao` -- CRUD operations
-- `EmbeddingDao` -- embedding storage and queries
-
 ## Configuration
 
 Available in the Settings screen:
@@ -175,15 +143,14 @@ Available in the Settings screen:
 | Setting | Default | Range |
 |---------|---------|-------|
 | Similarity threshold | 0.55 | 0.30 -- 0.95 |
-| Embedding model | Fast (MobileNet V3 Small) | Fast / Precise |
+| Embedding model | Semantic (MobileCLIP-S0) | Semantic / Fast / Precise |
 | Execution profile | Balanced | Battery / Balanced / Performance |
-| Manual mode | Off | On / Off |
+| Dynamic color (Material You) | Off | On / Off (Android 12+) |
 | Dark mode | Off | On / Off |
 
 Notes:
-- In manual mode, folder B opens in assisted offline review instead of scored suggestions.
-- Threshold only affects model mode.
 - Folder selection is limited to image folders discoverable through MediaStore. The app does not expose the system document tree picker.
+- The UI is localized in English and Spanish.
 
 ## Requirements
 

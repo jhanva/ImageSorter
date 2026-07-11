@@ -6,11 +6,11 @@ import com.smartfolder.data.media.MediaStoreFolderProvider
 import com.smartfolder.domain.model.ExecutionProfile
 import com.smartfolder.domain.model.Folder
 import com.smartfolder.domain.model.FolderRole
-import com.smartfolder.domain.model.ImageFolderOption
 import com.smartfolder.domain.model.ModelChoice
-import com.smartfolder.domain.repository.EmbeddingRepository
+import com.smartfolder.domain.model.StoredSuggestion
 import com.smartfolder.domain.repository.FolderRepository
 import com.smartfolder.domain.repository.SettingsRepository
+import com.smartfolder.domain.repository.SuggestionRepository
 import com.smartfolder.domain.usecase.IndexFolderUseCase
 import com.smartfolder.domain.usecase.SelectFolderUseCase
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -38,27 +38,8 @@ class HomeViewModelTest {
         val sourceFolderOne = folder(2L, FolderRole.SOURCE, "Source 1", indexedCount = 4, imageCount = 4)
         val sourceFolderTwo = folder(3L, FolderRole.SOURCE, "Source 2", indexedCount = 2, imageCount = 2)
         val folderRepository = FakeFolderRepository(listOf(destinationFolder, sourceFolderOne, sourceFolderTwo))
-        val settingsRepository = FakeSettingsRepository()
-        val embeddingRepository = FakeEmbeddingRepository(
-            countsByFolderAndModel = mapOf(
-                destinationFolder.id to mapOf(ModelChoice.FAST.modelFileName to 3),
-                sourceFolderOne.id to mapOf(ModelChoice.FAST.modelFileName to 4),
-                sourceFolderTwo.id to mapOf(ModelChoice.FAST.modelFileName to 2)
-            )
-        )
-        val selectFolderUseCase = mock(SelectFolderUseCase::class.java)
-        val indexFolderUseCase = mock(IndexFolderUseCase::class.java)
-        val mediaStoreFolderProvider = mock(MediaStoreFolderProvider::class.java)
 
-        `when`(mediaStoreFolderProvider.getImageFolders()).thenReturn(emptyList())
-        val viewModel = HomeViewModel(
-            selectFolderUseCase = selectFolderUseCase,
-            indexFolderUseCase = indexFolderUseCase,
-            embeddingRepository = embeddingRepository,
-            folderRepository = folderRepository,
-            settingsRepository = settingsRepository,
-            mediaStoreFolderProvider = mediaStoreFolderProvider
-        )
+        val viewModel = viewModel(folderRepository = folderRepository)
 
         val state = awaitState(viewModel) {
             it.destinationFolders.size == 1 && it.sourceFolders.size == 2 && it.canAnalyze
@@ -73,27 +54,8 @@ class HomeViewModelTest {
         val destinationFolder = folder(1L, FolderRole.DESTINATION, "Dest A", indexedCount = 1, imageCount = 1)
         val sourceFolder = folder(2L, FolderRole.SOURCE, "Source 1", indexedCount = 1, imageCount = 1)
         val folderRepository = FakeFolderRepository(listOf(destinationFolder, sourceFolder))
-        val settingsRepository = FakeSettingsRepository()
-        val embeddingRepository = FakeEmbeddingRepository(
-            countsByFolderAndModel = mapOf(
-                destinationFolder.id to mapOf(ModelChoice.FAST.modelFileName to 1),
-                sourceFolder.id to mapOf(ModelChoice.FAST.modelFileName to 1)
-            )
-        )
-        val selectFolderUseCase = mock(SelectFolderUseCase::class.java)
-        val indexFolderUseCase = mock(IndexFolderUseCase::class.java)
-        val mediaStoreFolderProvider = mock(MediaStoreFolderProvider::class.java)
 
-        `when`(mediaStoreFolderProvider.getImageFolders()).thenReturn(emptyList())
-
-        val viewModel = HomeViewModel(
-            selectFolderUseCase = selectFolderUseCase,
-            indexFolderUseCase = indexFolderUseCase,
-            embeddingRepository = embeddingRepository,
-            folderRepository = folderRepository,
-            settingsRepository = settingsRepository,
-            mediaStoreFolderProvider = mediaStoreFolderProvider
-        )
+        val viewModel = viewModel(folderRepository = folderRepository)
 
         awaitState(viewModel) { it.canAnalyze }
         folderRepository.emit(emptyList())
@@ -108,68 +70,60 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `cannot analyze when one selected source is not indexed`() = runTest(mainDispatcherRule.dispatcher) {
-        val destinationFolder = folder(1L, FolderRole.DESTINATION, "Dest A", indexedCount = 3, imageCount = 3)
-        val indexedSource = folder(2L, FolderRole.SOURCE, "Source 1", indexedCount = 4, imageCount = 4)
+    fun `can analyze with unindexed folders because analysis indexes them first`() = runTest(mainDispatcherRule.dispatcher) {
+        val destinationFolder = folder(1L, FolderRole.DESTINATION, "Dest A", indexedCount = 0, imageCount = 0)
         val pendingSource = folder(3L, FolderRole.SOURCE, "Source 2", indexedCount = 0, imageCount = 2)
-        val folderRepository = FakeFolderRepository(listOf(destinationFolder, indexedSource, pendingSource))
-        val settingsRepository = FakeSettingsRepository()
-        val embeddingRepository = FakeEmbeddingRepository(
-            countsByFolderAndModel = mapOf(
-                destinationFolder.id to mapOf(ModelChoice.FAST.modelFileName to 3),
-                indexedSource.id to mapOf(ModelChoice.FAST.modelFileName to 4),
-                pendingSource.id to mapOf(ModelChoice.FAST.modelFileName to 0)
-            )
-        )
-        val selectFolderUseCase = mock(SelectFolderUseCase::class.java)
-        val indexFolderUseCase = mock(IndexFolderUseCase::class.java)
-        val mediaStoreFolderProvider = mock(MediaStoreFolderProvider::class.java)
+        val folderRepository = FakeFolderRepository(listOf(destinationFolder, pendingSource))
 
-        `when`(mediaStoreFolderProvider.getImageFolders()).thenReturn(emptyList())
-        val viewModel = HomeViewModel(
-            selectFolderUseCase = selectFolderUseCase,
-            indexFolderUseCase = indexFolderUseCase,
-            embeddingRepository = embeddingRepository,
-            folderRepository = folderRepository,
-            settingsRepository = settingsRepository,
-            mediaStoreFolderProvider = mediaStoreFolderProvider
-        )
+        val viewModel = viewModel(folderRepository = folderRepository)
 
-        val state = awaitState(viewModel) { it.sourceFolders.size == 2 }
+        val state = awaitState(viewModel) { it.sourceFolders.size == 1 }
+        assertTrue(state.canAnalyze)
+    }
+
+    @Test
+    fun `cannot analyze without at least one destination and one source`() = runTest(mainDispatcherRule.dispatcher) {
+        val destinationFolder = folder(1L, FolderRole.DESTINATION, "Dest A", indexedCount = 3, imageCount = 3)
+        val folderRepository = FakeFolderRepository(listOf(destinationFolder))
+
+        val viewModel = viewModel(folderRepository = folderRepository)
+
+        val state = awaitState(viewModel) { it.destinationFolders.size == 1 }
         assertFalse(state.canAnalyze)
     }
 
     @Test
-    fun `changing model disables analyze until folders are indexed for the selected model`() = runTest(mainDispatcherRule.dispatcher) {
-        val destinationFolder = folder(1L, FolderRole.DESTINATION, "Dest A", indexedCount = 3, imageCount = 3)
-        val sourceFolder = folder(2L, FolderRole.SOURCE, "Source 1", indexedCount = 3, imageCount = 3)
-        val folderRepository = FakeFolderRepository(listOf(destinationFolder, sourceFolder))
-        val settingsRepository = FakeSettingsRepository()
-        val embeddingRepository = FakeEmbeddingRepository(
-            countsByFolderAndModel = mapOf(
-                destinationFolder.id to mapOf(ModelChoice.FAST.modelFileName to 3, ModelChoice.PRECISE.modelFileName to 0),
-                sourceFolder.id to mapOf(ModelChoice.FAST.modelFileName to 3, ModelChoice.PRECISE.modelFileName to 0)
-            )
+    fun `exposes pending review count when stored suggestions exist`() = runTest(mainDispatcherRule.dispatcher) {
+        val folderRepository = FakeFolderRepository(emptyList())
+        val suggestionRepository = FakeSuggestionRepository(
+            listOf(storedSuggestion(1L), storedSuggestion(2L))
         )
+
+        val viewModel = viewModel(
+            folderRepository = folderRepository,
+            suggestionRepository = suggestionRepository
+        )
+
+        val state = awaitState(viewModel) { it.pendingReviewCount == 2 }
+        assertEquals(2, state.pendingReviewCount)
+    }
+
+    private fun viewModel(
+        folderRepository: FolderRepository,
+        suggestionRepository: SuggestionRepository = FakeSuggestionRepository(emptyList())
+    ): HomeViewModel {
         val selectFolderUseCase = mock(SelectFolderUseCase::class.java)
         val indexFolderUseCase = mock(IndexFolderUseCase::class.java)
         val mediaStoreFolderProvider = mock(MediaStoreFolderProvider::class.java)
-
         `when`(mediaStoreFolderProvider.getImageFolders()).thenReturn(emptyList())
-        val viewModel = HomeViewModel(
+        return HomeViewModel(
             selectFolderUseCase = selectFolderUseCase,
             indexFolderUseCase = indexFolderUseCase,
-            embeddingRepository = embeddingRepository,
             folderRepository = folderRepository,
-            settingsRepository = settingsRepository,
+            settingsRepository = FakeSettingsRepository(),
+            suggestionRepository = suggestionRepository,
             mediaStoreFolderProvider = mediaStoreFolderProvider
         )
-
-        awaitState(viewModel) { it.canAnalyze }
-        viewModel.setModelChoice(ModelChoice.PRECISE)
-
-        val state = awaitState(viewModel) { !it.canAnalyze && it.modelChoice == ModelChoice.PRECISE }
-        assertFalse(state.canAnalyze)
     }
 
     private suspend fun awaitState(
@@ -206,6 +160,29 @@ class HomeViewModelTest {
 
     private fun uri(value: String): Uri = TestUri(value)
 
+    private fun storedSuggestion(imageId: Long): StoredSuggestion = StoredSuggestion(
+        imageId = imageId,
+        destinationFolderId = 100L,
+        score = 0.9f,
+        secondBestScore = 0.5f,
+        centroidScore = 0.8f,
+        topKScore = 0.9f,
+        topSimilarIds = emptyList(),
+        topSimilarScores = emptyList(),
+        candidateIds = emptyList(),
+        candidateScores = emptyList(),
+        createdAt = 1L
+    )
+
+    private class FakeSuggestionRepository(
+        private val suggestions: List<StoredSuggestion>
+    ) : SuggestionRepository {
+        override suspend fun getAll(): List<StoredSuggestion> = suggestions
+        override suspend fun insertAll(suggestions: List<StoredSuggestion>) = Unit
+        override suspend fun replaceAll(suggestions: List<StoredSuggestion>) = Unit
+        override suspend fun deleteAll() = Unit
+    }
+
     private class FakeFolderRepository(initialFolders: List<Folder>) : FolderRepository {
         private val foldersFlow = MutableStateFlow(initialFolders)
         val deletedFolders = mutableListOf<Folder>()
@@ -214,6 +191,9 @@ class HomeViewModelTest {
 
         override suspend fun getByRole(role: FolderRole): List<Folder> =
             foldersFlow.value.filter { it.role == role }
+
+        override suspend fun getById(id: Long): Folder? =
+            foldersFlow.value.firstOrNull { it.id == id }
 
         override suspend fun getByUri(uri: String): Folder? =
             foldersFlow.value.firstOrNull { it.uri.toString() == uri }
@@ -247,10 +227,11 @@ class HomeViewModelTest {
 
     private class FakeSettingsRepository : SettingsRepository {
         override val threshold: Flow<Float> = flowOf(0.55f)
-        private val modelChoiceFlow = MutableStateFlow(ModelChoice.FAST)
+        private val modelChoiceFlow = MutableStateFlow(ModelChoice.DEFAULT)
         override val modelChoice: Flow<ModelChoice> = modelChoiceFlow
         override val executionProfile: Flow<ExecutionProfile> = flowOf(ExecutionProfile.BALANCED)
         override val darkMode: Flow<Boolean> = flowOf(false)
+        override val dynamicColor: Flow<Boolean> = flowOf(false)
 
         override suspend fun setThreshold(value: Float) = Unit
 
@@ -261,24 +242,7 @@ class HomeViewModelTest {
         override suspend fun setExecutionProfile(profile: ExecutionProfile) = Unit
 
         override suspend fun setDarkMode(enabled: Boolean) = Unit
-    }
 
-    private class FakeEmbeddingRepository(
-        private val countsByFolderAndModel: Map<Long, Map<String, Int>>
-    ) : EmbeddingRepository {
-        override suspend fun getByImageIds(imageIds: List<Long>) = emptyList<com.smartfolder.domain.model.Embedding>()
-
-        override suspend fun getByFolderAndModel(folderId: Long, modelName: String) =
-            emptyList<com.smartfolder.domain.model.Embedding>()
-
-        override suspend fun insert(embedding: com.smartfolder.domain.model.Embedding): Long = 0L
-
-        override suspend fun delete(embedding: com.smartfolder.domain.model.Embedding) = Unit
-
-        override suspend fun deleteByFolder(folderId: Long) = Unit
-
-        override suspend fun countByFolderAndModel(folderId: Long, modelName: String): Int {
-            return countsByFolderAndModel[folderId]?.get(modelName) ?: 0
-        }
+        override suspend fun setDynamicColor(enabled: Boolean) = Unit
     }
 }

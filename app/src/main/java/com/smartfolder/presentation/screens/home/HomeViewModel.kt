@@ -8,10 +8,9 @@ import com.smartfolder.domain.model.Folder
 import com.smartfolder.domain.model.FolderRole
 import com.smartfolder.domain.model.IndexingPhase
 import com.smartfolder.domain.model.IndexingProgress
-import com.smartfolder.domain.model.ModelChoice
-import com.smartfolder.domain.repository.EmbeddingRepository
 import com.smartfolder.domain.repository.FolderRepository
 import com.smartfolder.domain.repository.SettingsRepository
+import com.smartfolder.domain.repository.SuggestionRepository
 import com.smartfolder.domain.usecase.IndexFolderUseCase
 import com.smartfolder.domain.usecase.SelectFolderUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -27,9 +26,9 @@ import javax.inject.Inject
 class HomeViewModel @Inject constructor(
     private val selectFolderUseCase: SelectFolderUseCase,
     private val indexFolderUseCase: IndexFolderUseCase,
-    private val embeddingRepository: EmbeddingRepository,
     private val folderRepository: FolderRepository,
     private val settingsRepository: SettingsRepository,
+    private val suggestionRepository: SuggestionRepository,
     private val mediaStoreFolderProvider: MediaStoreFolderProvider
 ) : ViewModel() {
 
@@ -40,7 +39,6 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.modelChoice.collect { choice ->
                 _uiState.value = _uiState.value.copy(modelChoice = choice)
-                refreshAnalyzeAvailability()
             }
         }
         viewModelScope.launch {
@@ -50,6 +48,7 @@ class HomeViewModel @Inject constructor(
         }
         observeFolders()
         refreshAvailableImageFolders()
+        refreshPendingReview()
     }
 
     private fun observeFolders() {
@@ -65,9 +64,8 @@ class HomeViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(
                     destinationFolders = destinationFolders,
                     sourceFolders = sourceFolders,
-                    canAnalyze = false
+                    canAnalyze = destinationFolders.isNotEmpty() && sourceFolders.isNotEmpty()
                 )
-                refreshAnalyzeAvailability()
             }
         }
     }
@@ -97,26 +95,22 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    fun setModelChoice(choice: ModelChoice) {
+    fun refreshPendingReview() {
         viewModelScope.launch {
-            settingsRepository.setModelChoice(choice)
+            val pending = try {
+                suggestionRepository.getAll().size
+            } catch (_: Exception) {
+                0
+            }
+            _uiState.value = _uiState.value.copy(pendingReviewCount = pending)
         }
     }
 
-    fun indexDestinationFolders() {
-        indexFolders(FolderRole.DESTINATION)
+    fun reindexFolder(folder: Folder) {
+        indexFolders(folder.role, listOf(folder))
     }
 
-    fun indexSourceFolders() {
-        indexFolders(FolderRole.SOURCE)
-    }
-
-    private fun indexFolders(role: FolderRole) {
-        val folders = if (role == FolderRole.DESTINATION) {
-            _uiState.value.destinationFolders
-        } else {
-            _uiState.value.sourceFolders
-        }
+    private fun indexFolders(role: FolderRole, folders: List<Folder>) {
         if (folders.isEmpty()) return
 
         viewModelScope.launch {
@@ -140,13 +134,6 @@ class HomeViewModel @Inject constructor(
                     )
                 }
             }
-            val latestFolders = folderRepository.getByRole(role)
-            _uiState.value = _uiState.value.copy(
-                destinationFolders = if (role == FolderRole.DESTINATION) latestFolders.sortedBy { it.id } else _uiState.value.destinationFolders,
-                sourceFolders = if (role == FolderRole.SOURCE) latestFolders.sortedBy { it.id } else _uiState.value.sourceFolders,
-                canAnalyze = false
-            )
-            refreshAnalyzeAvailability()
             updateIndexingState(
                 role = role,
                 isIndexing = false,
@@ -199,36 +186,6 @@ class HomeViewModel @Inject constructor(
                 availableImageFolders = folders,
                 isLoadingImageFolders = false
             )
-        }
-    }
-
-    private fun refreshAnalyzeAvailability() {
-        viewModelScope.launch {
-            val state = _uiState.value
-            val canAnalyze = canAnalyze(
-                destinationFolders = state.destinationFolders,
-                sourceFolders = state.sourceFolders,
-                modelChoice = state.modelChoice
-            )
-            _uiState.value = _uiState.value.copy(canAnalyze = canAnalyze)
-        }
-    }
-
-    private suspend fun canAnalyze(
-        destinationFolders: List<Folder>,
-        sourceFolders: List<Folder>,
-        modelChoice: ModelChoice
-    ): Boolean {
-        if (destinationFolders.isEmpty() || sourceFolders.isEmpty()) return false
-        return (destinationFolders + sourceFolders).all { folder ->
-            if (folder.imageCount <= 0) {
-                false
-            } else {
-                embeddingRepository.countByFolderAndModel(
-                    folderId = folder.id,
-                    modelName = modelChoice.modelFileName
-                ) >= folder.imageCount
-            }
         }
     }
 }

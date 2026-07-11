@@ -7,12 +7,14 @@ import com.smartfolder.domain.model.Folder
 import com.smartfolder.domain.model.FolderRole
 import com.smartfolder.domain.model.StoredSuggestion
 import com.smartfolder.domain.model.SuggestionItem
+import com.smartfolder.domain.model.confidenceMargin
 import com.smartfolder.domain.repository.FolderRepository
 import com.smartfolder.domain.repository.SettingsRepository
 import com.smartfolder.domain.repository.SuggestionRepository
 import com.smartfolder.domain.usecase.GetSuggestionsUseCase
 import com.smartfolder.domain.usecase.LoadSuggestionsUseCase
 import com.smartfolder.domain.usecase.MoveImagesUseCase
+import com.smartfolder.domain.usecase.UndoMoveUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,14 +27,24 @@ import javax.inject.Inject
 class ResultsViewModel @Inject constructor(
     private val getSuggestionsUseCase: GetSuggestionsUseCase,
     private val moveImagesUseCase: MoveImagesUseCase,
+    private val undoMoveUseCase: UndoMoveUseCase,
     private val folderRepository: FolderRepository,
     private val settingsRepository: SettingsRepository,
     private val loadSuggestionsUseCase: LoadSuggestionsUseCase,
     private val suggestionRepository: SuggestionRepository
 ) : ViewModel() {
 
+    companion object {
+        // A suggestion is high confidence when the score clears the threshold
+        // comfortably and no other destination is close behind.
+        const val HIGH_CONFIDENCE_MIN_SCORE = 0.75f
+        const val HIGH_CONFIDENCE_MIN_MARGIN = 0.10f
+    }
+
     private val _uiState = MutableStateFlow(ResultsUiState())
     val uiState: StateFlow<ResultsUiState> = _uiState.asStateFlow()
+
+    private var lastMoveBatch: UndoMoveUseCase.UndoBatch? = null
 
     init {
         viewModelScope.launch {
@@ -46,7 +58,7 @@ class ResultsViewModel @Inject constructor(
             _uiState.value = refreshDerivedState(
                 _uiState.value.copy(
                     threshold = threshold,
-                    moveResultMessage = null
+                    moveSummary = null
                 )
             )
         }
@@ -61,6 +73,41 @@ class ResultsViewModel @Inject constructor(
                 selectedIds + imageId
             }
         )
+    }
+
+    fun toggleSection(destinationId: Long) {
+        val collapsed = _uiState.value.collapsedSectionIds
+        _uiState.value = _uiState.value.copy(
+            collapsedSectionIds = if (destinationId in collapsed) {
+                collapsed - destinationId
+            } else {
+                collapsed + destinationId
+            }
+        )
+    }
+
+    fun selectAllInSection(destinationId: Long) {
+        val state = _uiState.value
+        val sectionIds = state.filteredSuggestions
+            .filter { assignedDestinationId(it, state.destinationOverrides) == destinationId }
+            .map { it.image.id }
+        _uiState.value = state.copy(selectedIds = state.selectedIds + sectionIds)
+    }
+
+    fun clearSelection() {
+        _uiState.value = _uiState.value.copy(selectedIds = emptySet())
+    }
+
+    fun selectHighConfidence() {
+        val state = _uiState.value
+        val confidentIds = state.filteredSuggestions
+            .filter { suggestion ->
+                assignedDestinationId(suggestion, state.destinationOverrides) != 0L &&
+                    suggestion.score >= HIGH_CONFIDENCE_MIN_SCORE &&
+                    suggestion.confidenceMargin >= HIGH_CONFIDENCE_MIN_MARGIN
+            }
+            .map { it.image.id }
+        _uiState.value = state.copy(selectedIds = state.selectedIds + confidentIds)
     }
 
     fun setDestinationOverride(imageId: Long, destinationId: Long) {
@@ -86,7 +133,7 @@ class ResultsViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(
                 isMoving = true,
                 error = null,
-                moveResultMessage = null
+                moveSummary = null
             )
 
             try {
@@ -99,6 +146,7 @@ class ResultsViewModel @Inject constructor(
                 var copiedOnly = 0
                 var failed = 0
                 val movedIds = mutableSetOf<Long>()
+                val movedEntries = mutableListOf<MoveImagesUseCase.MovedEntry>()
                 val errors = mutableListOf<String>()
 
                 groupedSuggestions.forEach { (destinationId, suggestions) ->
@@ -117,7 +165,17 @@ class ResultsViewModel @Inject constructor(
                     copiedOnly += report.copiedOnly
                     failed += report.failed
                     movedIds += report.movedImageIds
+                    movedEntries += report.movedEntries
                     errors += report.errors
+                }
+
+                lastMoveBatch = movedEntries.takeIf { it.isNotEmpty() }?.let { entries ->
+                    UndoMoveUseCase.UndoBatch(
+                        entries = entries,
+                        suggestions = selectedSuggestions
+                            .filter { it.image.id in movedIds }
+                            .map { toStoredSuggestion(it, stateSnapshot.destinationOverrides) }
+                    )
                 }
 
                 val remainingSuggestions = _uiState.value.allSuggestions.filterNot { it.image.id in movedIds }
@@ -136,7 +194,8 @@ class ResultsViewModel @Inject constructor(
                         selectedIds = _uiState.value.selectedIds - movedIds,
                         destinationOverrides = _uiState.value.destinationOverrides.filterKeys { it !in movedIds },
                         isMoving = false,
-                        moveResultMessage = buildMoveMessage(moved, copiedOnly, failed),
+                        moveSummary = MoveSummary(moved = moved, copiedOnly = copiedOnly, failed = failed),
+                        canUndo = lastMoveBatch != null,
                         error = errors.takeIf { it.isNotEmpty() }?.joinToString("\n")
                     )
                 )
@@ -144,6 +203,34 @@ class ResultsViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(
                     isMoving = false,
                     error = e.message ?: "Could not move selected images."
+                )
+            }
+        }
+    }
+
+    fun undoLastMove() {
+        val batch = lastMoveBatch ?: return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isMoving = true, error = null)
+            try {
+                val report = undoMoveUseCase(batch)
+                lastMoveBatch = null
+                reload()
+                _uiState.value = _uiState.value.copy(
+                    isMoving = false,
+                    canUndo = false,
+                    moveSummary = MoveSummary(
+                        moved = 0,
+                        copiedOnly = 0,
+                        failed = report.failed,
+                        restored = report.restored
+                    ),
+                    error = report.errors.takeIf { it.isNotEmpty() }?.joinToString("\n")
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isMoving = false,
+                    error = e.message ?: "Could not undo the last move."
                 )
             }
         }
@@ -160,8 +247,10 @@ class ResultsViewModel @Inject constructor(
 
     fun getSelectedImageUris(): List<Uri> = getImageUris(_uiState.value.selectedIds)
 
+    fun getUndoImageUris(): List<Uri> = lastMoveBatch?.entries?.map { it.newUri } ?: emptyList()
+
     fun dismissMessage() {
-        _uiState.value = _uiState.value.copy(moveResultMessage = null)
+        _uiState.value = _uiState.value.copy(moveSummary = null)
     }
 
     fun dismissError() {
@@ -181,7 +270,8 @@ class ResultsViewModel @Inject constructor(
             ResultsUiState(
                 allSuggestions = suggestions,
                 destinationFolders = destinationFolders,
-                threshold = threshold
+                threshold = threshold,
+                canUndo = lastMoveBatch != null
             )
         )
     }
@@ -233,7 +323,7 @@ class ResultsViewModel @Inject constructor(
                     destination = Folder(
                         id = 0L,
                         uri = fallbackUri ?: return@let null,
-                        displayName = "Needs manual routing",
+                        displayName = "",
                         role = FolderRole.DESTINATION
                     ),
                     suggestions = destinationSuggestions.sortedByDescending { it.score }
@@ -281,19 +371,9 @@ class ResultsViewModel @Inject constructor(
             topKScore = suggestion.topKScore,
             topSimilarIds = suggestion.topSimilarImages.map { it.image.id },
             topSimilarScores = suggestion.topSimilarImages.map { it.score },
+            candidateIds = suggestion.candidateIds,
+            candidateScores = suggestion.candidateScores,
             createdAt = System.currentTimeMillis()
         )
-    }
-
-    private fun buildMoveMessage(
-        moved: Int,
-        copiedOnly: Int,
-        failed: Int
-    ): String {
-        return if (copiedOnly == 0 && failed == 0) {
-            "Moved: $moved"
-        } else {
-            "Moved: $moved, Copied: $copiedOnly, Failed: $failed"
-        }
     }
 }

@@ -17,12 +17,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.smartfolder.R
 
 @Composable
 fun ProgressIndicator(
-    phase: String,
+    phaseLabel: String,
     current: Int,
     total: Int,
     currentFileName: String,
@@ -50,11 +52,15 @@ fun ProgressIndicator(
                 Spacer(modifier = Modifier.size(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = readablePhase(phase),
-                        style = MaterialTheme.typography.titleLarge
+                        text = phaseLabel,
+                        style = MaterialTheme.typography.titleMedium
                     )
                     Text(
-                        text = if (total > 0) "$current of $total processed" else "Preparing local work",
+                        text = if (total > 0) {
+                            stringResource(R.string.analysis_progress_count, current, total)
+                        } else {
+                            stringResource(R.string.analysis_progress_preparing)
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -76,7 +82,7 @@ fun ProgressIndicator(
                 progress = { if (total > 0) current.toFloat() / total.toFloat() else 0f },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 18.dp),
+                    .padding(top = 16.dp),
                 trackColor = MaterialTheme.colorScheme.surfaceVariant
             )
             if (currentFileName.isNotEmpty()) {
@@ -84,22 +90,11 @@ fun ProgressIndicator(
                     text = currentFileName,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 12.dp)
+                    modifier = Modifier.padding(top = 12.dp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
     }
-}
-
-private fun readablePhase(raw: String): String {
-    return raw
-        .replace('_', ' ')
-        .lowercase()
-        .split(' ')
-        .filter { it.isNotBlank() }
-        .joinToString(" ") { token ->
-            token.replaceFirstChar { char ->
-                if (char.isLowerCase()) char.titlecase() else char.toString()
-            }
-        }
 }

@@ -12,21 +12,18 @@ import org.junit.Test
 class HomeVisualsTest {
 
     @Test
-    fun buildHeroContent_returnsSetupState_whenFoldersAreMissing() {
+    fun `stage is setup when folders are missing`() {
         val state = HomeUiState()
 
         val hero = HomeVisuals.buildHeroContent(state)
 
-        assertEquals("Build your offline sorter", hero.title)
-        assertEquals("Choose destination and source folders, then index them once for local matching.", hero.subtitle)
-        assertEquals("Choose folders", hero.primaryActionLabel)
-        assertEquals("0 of 4 setup steps complete", hero.progressLabel)
+        assertEquals(HomeHeroStage.SETUP, hero.stage)
         assertEquals(0f, hero.progress, 0.0001f)
         assertFalse(hero.isReady)
     }
 
     @Test
-    fun buildHeroContent_returnsReadyState_whenAllFoldersAreIndexed() {
+    fun `stage is ready when both folder groups exist`() {
         val state = HomeUiState(
             destinationFolders = listOf(folder(id = 1, role = FolderRole.DESTINATION, imageCount = 20, indexedCount = 20)),
             sourceFolders = listOf(folder(id = 2, role = FolderRole.SOURCE, imageCount = 14, indexedCount = 14)),
@@ -35,16 +32,13 @@ class HomeVisualsTest {
 
         val hero = HomeVisuals.buildHeroContent(state)
 
-        assertEquals("Library ready for routing", hero.title)
-        assertEquals("Everything is indexed locally. Run analysis to route your source images into the right destinations.", hero.subtitle)
-        assertEquals("Analyze library", hero.primaryActionLabel)
-        assertEquals("4 of 4 setup steps complete", hero.progressLabel)
+        assertEquals(HomeHeroStage.READY, hero.stage)
         assertEquals(1f, hero.progress, 0.0001f)
         assertTrue(hero.isReady)
     }
 
     @Test
-    fun buildHeroContent_returnsIndexingState_whenWorkIsInProgress() {
+    fun `stage is indexing while work is in progress`() {
         val state = HomeUiState(
             destinationFolders = listOf(folder(id = 1, role = FolderRole.DESTINATION, imageCount = 20, indexedCount = 20)),
             sourceFolders = listOf(folder(id = 2, role = FolderRole.SOURCE, imageCount = 14, indexedCount = 3)),
@@ -53,12 +47,22 @@ class HomeVisualsTest {
 
         val hero = HomeVisuals.buildHeroContent(state)
 
-        assertEquals("Indexing your folders", hero.title)
-        assertEquals("Keep the app open while ImageSorter builds local embeddings for the selected library.", hero.subtitle)
-        assertEquals("Indexing in progress", hero.primaryActionLabel)
-        assertEquals("3 of 4 setup steps complete", hero.progressLabel)
-        assertEquals(0.75f, hero.progress, 0.0001f)
+        assertEquals(HomeHeroStage.INDEXING, hero.stage)
         assertFalse(hero.isReady)
+    }
+
+    @Test
+    fun `progress counts folder selection and indexing steps`() {
+        val state = HomeUiState(
+            destinationFolders = listOf(folder(id = 1, role = FolderRole.DESTINATION, imageCount = 20, indexedCount = 20)),
+            sourceFolders = listOf(folder(id = 2, role = FolderRole.SOURCE, imageCount = 14, indexedCount = 3))
+        )
+
+        val hero = HomeVisuals.buildHeroContent(state)
+
+        assertEquals(3, hero.completedSteps)
+        assertEquals(4, hero.totalSteps)
+        assertEquals(0.75f, hero.progress, 0.0001f)
     }
 
     private fun folder(

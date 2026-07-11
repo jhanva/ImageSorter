@@ -21,6 +21,8 @@ class SettingsRepositoryImpl @Inject constructor(
 
     override val darkMode: Flow<Boolean> = settingsDataStore.darkMode
 
+    override val dynamicColor: Flow<Boolean> = settingsDataStore.dynamicColor
+
     override suspend fun setThreshold(value: Float) {
         settingsDataStore.setThreshold(value)
     }
@@ -35,5 +37,9 @@ class SettingsRepositoryImpl @Inject constructor(
 
     override suspend fun setDarkMode(enabled: Boolean) {
         settingsDataStore.setDarkMode(enabled)
+    }
+
+    override suspend fun setDynamicColor(enabled: Boolean) {
+        settingsDataStore.setDynamicColor(enabled)
     }
 }

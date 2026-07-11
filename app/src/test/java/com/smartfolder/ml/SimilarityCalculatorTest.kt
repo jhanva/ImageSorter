@@ -164,6 +164,75 @@ class SimilarityCalculatorTest {
         assertEquals(fromList, fromArray, 0.0001f)
     }
 
+    // -- computeScore calibrated by reference count --
+
+    @Test
+    fun `calibrated computeScore with plentiful references matches base weights`() {
+        val base = SimilarityCalculator.computeScore(
+            centroidScore = 0.8f,
+            topKMean = 0.7f,
+            topKMax = 0.9f,
+            referenceSupport = 0.6f
+        )
+        val calibrated = SimilarityCalculator.computeScore(
+            centroidScore = 0.8f,
+            topKMean = 0.7f,
+            topKMax = 0.9f,
+            referenceSupport = 0.6f,
+            referenceCount = 5
+        )
+        assertEquals(base, calibrated, 0.0001f)
+    }
+
+    @Test
+    fun `calibrated computeScore with single reference ignores reference support`() {
+        val centroid = 0.8f
+        val mean = 0.7f
+        val max = 0.9f
+        val expected = (0.2f * centroid + 0.25f * mean + 0.2f * max) / 0.65f
+        val calibrated = SimilarityCalculator.computeScore(
+            centroidScore = centroid,
+            topKMean = mean,
+            topKMax = max,
+            referenceSupport = 0.99f,
+            referenceCount = 1
+        )
+        assertEquals(expected, calibrated, 0.0001f)
+    }
+
+    @Test
+    fun `calibrated computeScore scales support weight linearly for small folders`() {
+        val centroid = 0.8f
+        val mean = 0.7f
+        val max = 0.9f
+        val support = 0.6f
+        val supportWeight = 0.35f * 0.5f
+        val scale = (1f - supportWeight) / 0.65f
+        val expected = scale * (0.2f * centroid + 0.25f * mean + 0.2f * max) + supportWeight * support
+        val calibrated = SimilarityCalculator.computeScore(
+            centroidScore = centroid,
+            topKMean = mean,
+            topKMax = max,
+            referenceSupport = support,
+            referenceCount = 3
+        )
+        assertEquals(expected, calibrated, 0.0001f)
+    }
+
+    @Test
+    fun `calibrated computeScore with perfect inputs stays at 1`() {
+        assertEquals(
+            1f,
+            SimilarityCalculator.computeScore(1f, 1f, 1f, 1f, referenceCount = 1),
+            0.0001f
+        )
+        assertEquals(
+            1f,
+            SimilarityCalculator.computeScore(1f, 1f, 1f, 1f, referenceCount = 3),
+            0.0001f
+        )
+    }
+
     @Test
     fun `computeScore rewards reference consensus over a single spiky match`() {
         val strongConsensus = SimilarityCalculator.computeScore(

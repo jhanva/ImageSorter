@@ -23,7 +23,7 @@ import com.smartfolder.data.local.db.entities.SuggestionEntity
         DecisionEntity::class,
         SuggestionEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

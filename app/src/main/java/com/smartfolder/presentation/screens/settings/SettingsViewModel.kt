@@ -43,6 +43,11 @@ class SettingsViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(darkMode = darkMode)
             }
         }
+        viewModelScope.launch {
+            settingsRepository.dynamicColor.collect { dynamicColor ->
+                _uiState.value = _uiState.value.copy(dynamicColor = dynamicColor)
+            }
+        }
     }
 
     fun setThreshold(value: Float) {
@@ -69,6 +74,12 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun setDynamicColor(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setDynamicColor(enabled)
+        }
+    }
+
     fun clearCache() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isClearingCache = true)
@@ -76,12 +87,12 @@ class SettingsViewModel @Inject constructor(
                 clearCacheUseCase()
                 _uiState.value = _uiState.value.copy(
                     isClearingCache = false,
-                    message = "Cache cleared successfully"
+                    message = SettingsMessage.CACHE_CLEARED
                 )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isClearingCache = false,
-                    message = "Failed to clear cache: ${e.message}"
+                    message = SettingsMessage.CACHE_FAILED
                 )
             }
         }

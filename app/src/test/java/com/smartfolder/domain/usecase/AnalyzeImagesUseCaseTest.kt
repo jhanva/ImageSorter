@@ -278,6 +278,46 @@ class AnalyzeImagesUseCaseTest {
         assertEquals(0L, suggestion.suggestedDestinationId)
     }
 
+    @Test
+    fun `stores alternative candidate destinations ordered by score`() = runTest {
+        val destinationVectorA = normalized(1f, 0f, 0f)
+        val destinationVectorB = normalized(0.8f, 0.2f, 0f)
+        val sourceVector = normalized(0.9f, 0.1f, 0f)
+
+        `when`(embeddingRepository.getByFolderAndModel(destinationA.id, ModelChoice.FAST.modelFileName))
+            .thenReturn(listOf(Embedding(1L, 101L, destinationVectorA, ModelChoice.FAST.modelFileName)))
+        `when`(embeddingRepository.getByFolderAndModel(destinationB.id, ModelChoice.FAST.modelFileName))
+            .thenReturn(listOf(Embedding(2L, 201L, destinationVectorB, ModelChoice.FAST.modelFileName)))
+        `when`(embeddingRepository.countByFolderAndModel(sourceA.id, ModelChoice.FAST.modelFileName))
+            .thenReturn(1)
+        `when`(embeddingRepository.getByFolderAndModel(sourceA.id, ModelChoice.FAST.modelFileName))
+            .thenReturn(listOf(Embedding(3L, 301L, sourceVector, ModelChoice.FAST.modelFileName)))
+        doAnswer {
+            val ids = it.getArgument<List<Long>>(0)
+            listOf(
+                ImageInfo(101L, destinationA.id, mock(Uri::class.java), "dest-a.png", "hash-101", 1000L, 100L),
+                ImageInfo(201L, destinationB.id, mock(Uri::class.java), "dest-b.png", "hash-201", 1000L, 100L),
+                ImageInfo(301L, sourceA.id, mock(Uri::class.java), "source.png", "hash-301", 1000L, 100L)
+            ).filter { image -> image.id in ids }
+        }.`when`(imageRepository).getByIds(anyList())
+
+        val results = useCase(
+            destinationFolders = listOf(destinationA, destinationB),
+            sourceFolders = listOf(sourceA),
+            modelChoice = ModelChoice.FAST,
+            threshold = 0.5f
+        ).toList()
+
+        val stored = storedSuggestions.single()
+        assertEquals(listOf(destinationA.id, destinationB.id), stored.candidateIds)
+        assertEquals(2, stored.candidateScores.size)
+        assertTrue(stored.candidateScores[0] >= stored.candidateScores[1])
+
+        val suggestion = results.last().suggestions.single()
+        assertEquals(listOf(destinationA.id, destinationB.id), suggestion.candidateIds)
+        assertEquals(2, suggestion.candidateScores.size)
+    }
+
     private fun normalized(vararg values: Float): FloatArray {
         val norm = kotlin.math.sqrt(values.sumOf { (it * it).toDouble() }).toFloat()
         return FloatArray(values.size) { index -> values[index] / norm }

@@ -18,5 +18,7 @@ data class SuggestionEntity(
     val topKScore: Float,
     val topSimilarIds: String,
     val topSimilarScores: String,
+    @androidx.room.ColumnInfo(defaultValue = "") val candidateIds: String = "",
+    @androidx.room.ColumnInfo(defaultValue = "") val candidateScores: String = "",
     val createdAt: Long
 )

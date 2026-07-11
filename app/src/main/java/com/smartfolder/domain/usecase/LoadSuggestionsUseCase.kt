@@ -36,7 +36,9 @@ class LoadSuggestionsUseCase @Inject constructor(
                 secondBestScore = suggestion.secondBestScore,
                 centroidScore = suggestion.centroidScore,
                 topKScore = suggestion.topKScore,
-                topSimilarImages = matches
+                topSimilarImages = matches,
+                candidateIds = suggestion.candidateIds,
+                candidateScores = suggestion.candidateScores
             )
         }
     }

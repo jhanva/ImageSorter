@@ -139,6 +139,11 @@ val downloadModels by tasks.registering {
         "mobileclip_s0_image.onnx" to mapOf(
             "url" to "https://huggingface.co/Xenova/mobileclip_s0/resolve/main/onnx/vision_model.onnx",
             "minSize" to "40000000"
+        ),
+        // CCIP feature extractor: anime character identity embeddings (768-d).
+        "ccip_caformer_24_feat.onnx" to mapOf(
+            "url" to "https://huggingface.co/deepghs/ccip_onnx/resolve/main/ccip-caformer-24-randaug-pruned/model_feat.onnx",
+            "minSize" to "100000000"
         )
     )
 

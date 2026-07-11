@@ -7,6 +7,8 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import com.smartfolder.R
 
 @Composable
 fun ThresholdSlider(
@@ -16,7 +18,7 @@ fun ThresholdSlider(
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
-            text = "Similarity Threshold: %.0f%%".format(value * 100),
+            text = stringResource(R.string.results_threshold_label, (value * 100).toInt()),
             style = MaterialTheme.typography.bodyMedium
         )
         Slider(

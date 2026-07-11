@@ -268,6 +268,8 @@ class IndexFolderUseCaseTest {
 
         override suspend fun getByRole(role: FolderRole): List<Folder> = emptyList()
 
+        override suspend fun getById(id: Long): Folder? = null
+
         override suspend fun getByUri(uri: String): Folder? = null
 
         override suspend fun insert(folder: Folder): Long = folder.id

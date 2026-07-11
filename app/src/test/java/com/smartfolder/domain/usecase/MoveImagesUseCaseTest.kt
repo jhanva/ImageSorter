@@ -60,6 +60,35 @@ class MoveImagesUseCaseTest {
     }
 
     @Test
+    fun `successful move records entry with new uri for undo`() = runTest {
+        val imageUri = mock(Uri::class.java)
+        val newUri = mock(Uri::class.java)
+        val image = ImageInfo(1L, 1L, imageUri, "test.jpg", "hash", 1000L, 100L)
+
+        `when`(safFileOps.moveFile(imageUri, destUri, "test.jpg"))
+            .thenReturn(MoveResult.Moved(newUri))
+
+        val report = useCase(listOf(image), destUri)
+
+        assertEquals(1, report.movedEntries.size)
+        assertEquals(image, report.movedEntries[0].image)
+        assertEquals(newUri, report.movedEntries[0].newUri)
+    }
+
+    @Test
+    fun `failed move does not record an undo entry`() = runTest {
+        val imageUri = mock(Uri::class.java)
+        val image = ImageInfo(1L, 1L, imageUri, "test.jpg", "hash", 1000L, 100L)
+
+        `when`(safFileOps.moveFile(imageUri, destUri, "test.jpg"))
+            .thenReturn(MoveResult.Failure("Permission denied"))
+
+        val report = useCase(listOf(image), destUri)
+
+        assertEquals(0, report.movedEntries.size)
+    }
+
+    @Test
     fun `copied only result increments copiedOnly count`() = runTest {
         val imageUri = mock(Uri::class.java)
         val newUri = mock(Uri::class.java)
