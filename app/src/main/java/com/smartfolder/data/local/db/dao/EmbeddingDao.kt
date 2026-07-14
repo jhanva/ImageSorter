@@ -14,6 +14,9 @@ interface EmbeddingDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(embedding: EmbeddingEntity): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(embeddings: List<EmbeddingEntity>): List<Long>
+
     @Delete
     suspend fun delete(embedding: EmbeddingEntity)
 

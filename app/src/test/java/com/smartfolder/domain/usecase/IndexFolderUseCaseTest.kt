@@ -295,9 +295,9 @@ class IndexFolderUseCaseTest {
         override suspend fun getByFolderAndModel(folderId: Long, modelName: String): List<Embedding> =
             emptyList()
 
-        override suspend fun insert(embedding: Embedding): Long {
-            insertedEmbeddings += embedding
-            return embedding.id
+        override suspend fun insertAll(embeddings: List<Embedding>): List<Long> {
+            insertedEmbeddings += embeddings
+            return embeddings.map { it.id }
         }
 
         override suspend fun delete(embedding: Embedding) {

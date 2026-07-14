@@ -24,8 +24,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.yield
 import javax.inject.Inject
 
@@ -41,12 +39,14 @@ class IndexFolderUseCase @Inject constructor(
 ) {
     companion object {
         private const val REGISTRATION_BATCH_SIZE = 500
+        private const val EMBEDDING_INSERT_BATCH_SIZE = 200
         private const val PROGRESS_EMIT_INTERVAL_MS = 250L
     }
 
     private data class IndexResult(
         val success: Boolean,
-        val displayName: String
+        val displayName: String,
+        val embedding: Embedding? = null
     )
 
     operator fun invoke(
@@ -62,8 +62,12 @@ class IndexFolderUseCase @Inject constructor(
         )
 
         try {
-            // Initialize embedder
-            imageEmbedder.initialize(modelChoice.modelFileName)
+            val cpuCount = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+            val parallelism = resolveIndexParallelism(executionProfile, cpuCount)
+            val batchSize = (parallelism * 2).coerceAtLeast(1)
+
+            // Initialize embedder with one session per worker so inference runs in parallel
+            imageEmbedder.initialize(modelChoice.modelFileName, poolSize = parallelism)
 
             emit(
                 IndexingProgress(
@@ -102,14 +106,10 @@ class IndexFolderUseCase @Inject constructor(
                 .filter { it.modelName == modelChoice.modelFileName }
                 .associateBy { it.imageId }
 
-            val cpuCount = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
-            val parallelism = resolveIndexParallelism(executionProfile, cpuCount)
-            val batchSize = (parallelism * 2).coerceAtLeast(1)
-
             var processed = 0
             var failed = 0
             var lastProgressEmitAt = 0L
-            val embedMutex = Mutex()
+            val pendingEmbeddings = mutableListOf<Embedding>()
 
             for (imageBatch in dbImages.chunked(batchSize)) {
                 val results = coroutineScope {
@@ -118,13 +118,18 @@ class IndexFolderUseCase @Inject constructor(
                             processImage(
                                 image = image,
                                 modelChoice = modelChoice,
-                                existingEmbedding = embeddingsByImageId[image.id],
-                                embedMutex = embedMutex
+                                existingEmbedding = embeddingsByImageId[image.id]
                             )
                         }
                     }.awaitAll()
                 }
                 yield()
+
+                results.forEach { result -> result.embedding?.let { pendingEmbeddings.add(it) } }
+                if (pendingEmbeddings.size >= EMBEDDING_INSERT_BATCH_SIZE) {
+                    flushEmbeddings(pendingEmbeddings)
+                    pendingEmbeddings.clear()
+                }
 
                 results.forEachIndexed { indexInBatch, result ->
                     processed++
@@ -150,6 +155,10 @@ class IndexFolderUseCase @Inject constructor(
                         lastProgressEmitAt = now
                     }
                 }
+            }
+
+            if (pendingEmbeddings.isNotEmpty()) {
+                flushEmbeddings(pendingEmbeddings)
             }
 
             // Update folder with successful count
@@ -190,8 +199,7 @@ class IndexFolderUseCase @Inject constructor(
     private suspend fun processImage(
         image: ImageInfo,
         modelChoice: ModelChoice,
-        existingEmbedding: Embedding?,
-        embedMutex: Mutex
+        existingEmbedding: Embedding?
     ): IndexResult {
         if (existingEmbedding != null && existingEmbedding.modelName == modelChoice.modelFileName) {
             return IndexResult(success = true, displayName = image.displayName)
@@ -203,21 +211,25 @@ class IndexFolderUseCase @Inject constructor(
         )
 
         return try {
-            val vector = embedMutex.withLock { imageEmbedder.embed(bitmap) }
+            val vector = imageEmbedder.embed(bitmap)
             if (vector != null) {
                 val embedding = Embedding(
                     imageId = image.id,
                     vector = vector,
                     modelName = modelChoice.modelFileName
                 )
-                existingEmbedding?.let { embeddingRepository.delete(it) }
-                embeddingRepository.insert(embedding)
-                IndexResult(success = true, displayName = image.displayName)
+                IndexResult(success = true, displayName = image.displayName, embedding = embedding)
             } else {
                 IndexResult(success = false, displayName = image.displayName)
             }
         } finally {
             bitmap.recycle()
+        }
+    }
+
+    private suspend fun flushEmbeddings(embeddings: List<Embedding>) {
+        transactionRunner.runInTransaction {
+            embeddingRepository.insertAll(embeddings)
         }
     }
 

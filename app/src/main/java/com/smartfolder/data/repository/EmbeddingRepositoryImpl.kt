@@ -26,8 +26,9 @@ class EmbeddingRepositoryImpl @Inject constructor(
         return embeddingDao.getByFolderAndModel(folderId, modelName).map { it.toDomain() }
     }
 
-    override suspend fun insert(embedding: Embedding): Long {
-        return embeddingDao.insert(embedding.toEntity())
+    override suspend fun insertAll(embeddings: List<Embedding>): List<Long> {
+        if (embeddings.isEmpty()) return emptyList()
+        return embeddingDao.insertAll(embeddings.map { it.toEntity() })
     }
 
     override suspend fun delete(embedding: Embedding) {

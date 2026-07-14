@@ -5,11 +5,17 @@ import android.graphics.Bitmap
 import com.smartfolder.domain.model.ModelBackend
 import com.smartfolder.domain.model.ModelChoice
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Holds a small pool of embedder sessions (one per concurrent worker) instead of a single
+ * shared instance, so concurrent embed() calls run inference in parallel rather than queueing
+ * behind one session. Each session in the pool is only ever used by one caller at a time.
+ */
 @Singleton
 class ImageEmbedderWrapper @Inject constructor(
     @ApplicationContext private val context: Context
@@ -18,38 +24,68 @@ class ImageEmbedderWrapper @Inject constructor(
 
     @Volatile private var currentModelFile: String? = null
     @Volatile private var currentBackend: ModelBackend? = null
-    @Volatile private var mediaPipeSession: MediaPipeImageEmbedderSession? = null
-    @Volatile private var clipSession: MobileClipSession? = null
+    @Volatile private var currentPoolSize: Int = 0
+    private val mediaPipeSessions = mutableListOf<MediaPipeImageEmbedderSession>()
+    private val clipSessions = mutableListOf<MobileClipSession>()
+    @Volatile private var mediaPipePool: Channel<MediaPipeImageEmbedderSession>? = null
+    @Volatile private var clipPool: Channel<MobileClipSession>? = null
 
-    suspend fun initialize(modelFileName: String) = mutex.withLock {
+    suspend fun initialize(modelFileName: String, poolSize: Int = 1) = mutex.withLock {
         val backend = backendForFile(modelFileName)
-        if (currentModelFile == modelFileName && currentBackend == backend) return@withLock
+        val size = poolSize.coerceAtLeast(1)
+        if (currentModelFile == modelFileName && currentBackend == backend && currentPoolSize == size) {
+            return@withLock
+        }
 
         closeInternal()
 
         when (backend) {
             ModelBackend.MEDIAPIPE_TFLITE -> {
-                mediaPipeSession = MediaPipeImageEmbedderSession.create(context, modelFileName)
+                repeat(size) {
+                    mediaPipeSessions.add(MediaPipeImageEmbedderSession.create(context, modelFileName))
+                }
+                val pool = Channel<MediaPipeImageEmbedderSession>(size)
+                mediaPipeSessions.forEach { pool.trySend(it) }
+                mediaPipePool = pool
             }
             ModelBackend.ONNX_CLIP -> {
                 val fallbackInputSize = ModelChoice.entries
                     .firstOrNull { it.modelFileName == modelFileName }
                     ?.onnxInputFallback
                     ?: 256
-                clipSession = MobileClipSession.create(context, modelFileName, fallbackInputSize)
+                repeat(size) {
+                    clipSessions.add(MobileClipSession.create(context, modelFileName, fallbackInputSize, size))
+                }
+                val pool = Channel<MobileClipSession>(size)
+                clipSessions.forEach { pool.trySend(it) }
+                clipPool = pool
             }
         }
         currentModelFile = modelFileName
         currentBackend = backend
+        currentPoolSize = size
     }
 
     suspend fun embed(bitmap: Bitmap): FloatArray? {
-        val snapshot = mutex.withLock {
-            Triple(mediaPipeSession, clipSession, currentBackend)
-        }
-        return when (snapshot.third) {
-            ModelBackend.MEDIAPIPE_TFLITE -> snapshot.first?.embed(bitmap)
-            ModelBackend.ONNX_CLIP -> snapshot.second?.embed(bitmap)
+        return when (currentBackend) {
+            ModelBackend.MEDIAPIPE_TFLITE -> {
+                val pool = mediaPipePool ?: return null
+                val session = pool.receive()
+                try {
+                    session.embed(bitmap)
+                } finally {
+                    pool.send(session)
+                }
+            }
+            ModelBackend.ONNX_CLIP -> {
+                val pool = clipPool ?: return null
+                val session = pool.receive()
+                try {
+                    session.embed(bitmap)
+                } finally {
+                    pool.send(session)
+                }
+            }
             null -> null
         }
     }
@@ -58,13 +94,19 @@ class ImageEmbedderWrapper @Inject constructor(
         closeInternal()
         currentModelFile = null
         currentBackend = null
+        currentPoolSize = 0
     }
 
     private fun closeInternal() {
-        mediaPipeSession?.close()
-        mediaPipeSession = null
-        clipSession?.close()
-        clipSession = null
+        mediaPipePool?.close()
+        mediaPipePool = null
+        mediaPipeSessions.forEach { it.close() }
+        mediaPipeSessions.clear()
+
+        clipPool?.close()
+        clipPool = null
+        clipSessions.forEach { it.close() }
+        clipSessions.clear()
     }
 
     private fun backendForFile(modelFileName: String): ModelBackend {

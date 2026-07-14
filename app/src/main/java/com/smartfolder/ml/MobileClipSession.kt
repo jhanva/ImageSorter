@@ -33,7 +33,8 @@ internal class MobileClipSession private constructor(
         suspend fun create(
             context: Context,
             modelFileName: String,
-            fallbackInputSize: Int = 256
+            fallbackInputSize: Int = 256,
+            poolSize: Int = 1
         ): MobileClipSession =
             withContext(Dispatchers.IO) {
                 val assetPath = "models/$modelFileName"
@@ -42,9 +43,12 @@ internal class MobileClipSession private constructor(
                     error("Model file not bundled in assets: $assetPath")
                 }
                 val env = OrtEnvironment.getEnvironment()
+                val cpuCount = Runtime.getRuntime().availableProcessors()
                 val opts = OrtSession.SessionOptions().apply {
+                    // Split intra-op threads across the pool so concurrent sessions don't
+                    // oversubscribe the CPU (poolSize sessions running at once).
                     setIntraOpNumThreads(
-                        Runtime.getRuntime().availableProcessors().coerceAtMost(4)
+                        (cpuCount / poolSize.coerceAtLeast(1)).coerceIn(1, 4)
                     )
                     runCatching { addNnapi() }.onFailure {
                         Log.w(TAG, "NNAPI delegate unavailable: ${it.message}")
