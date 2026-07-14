@@ -96,6 +96,27 @@
     <string name="results_expand_section">Expandir seccion</string>
     <string name="results_collapse_section">Contraer seccion</string>
     <string name="results_preview">Ver imagen</string>
+    <string name="results_filter_all">Todas</string>
+    <string name="results_filter_pending">Pendientes</string>
+    <string name="results_filter_reviewed">Revisadas</string>
+    <string name="results_sort_by_score">Mejor coincidencia primero</string>
+    <string name="results_sort_by_uncertainty">Dudosas primero</string>
+    <string name="results_review_mode">Modo revision rapida</string>
+
+    <!-- Review mode -->
+    <string name="review_title">Revision rapida</string>
+    <string name="review_progress">Imagen %1$d de %2$d</string>
+    <string name="review_similar_label">Se parece a estas imagenes que ya estan en el destino:</string>
+    <string name="review_accept_candidate">%1$s (%2$d%%)</string>
+    <string name="review_skip">Omitir</string>
+    <string name="review_undo">Deshacer ultima decision</string>
+    <string name="review_complete_title">Revision completada</string>
+    <string name="review_complete_message">%1$d aceptadas, %2$d omitidas.</string>
+    <string name="review_summary_count">%1$d imagenes</string>
+    <string name="review_apply_moves">Mover %1$d imagenes aceptadas</string>
+    <string name="review_done">Listo</string>
+    <string name="review_empty_title">Nada por revisar</string>
+    <string name="review_empty_message">Todas las sugerencias fueron revisadas. Ejecuta un nuevo analisis para obtener mas.</string>
 
     <!-- Ajustes -->
     <string name="settings_title">Ajustes</string>

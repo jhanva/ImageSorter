@@ -2,6 +2,13 @@ package com.smartfolder.presentation.screens.results
 
 import com.smartfolder.domain.model.Folder
 import com.smartfolder.domain.model.SuggestionItem
+import com.smartfolder.domain.model.SuggestionSortMode
+
+enum class ReviewStatusFilter {
+    ALL,
+    PENDING,
+    REVIEWED
+}
 
 data class DestinationSuggestionSection(
     val destination: Folder,
@@ -21,6 +28,8 @@ data class ResultsUiState(
     val destinationFolders: List<Folder> = emptyList(),
     val destinationSections: List<DestinationSuggestionSection> = emptyList(),
     val threshold: Float = 0.80f,
+    val sortMode: SuggestionSortMode = SuggestionSortMode.BY_SCORE,
+    val statusFilter: ReviewStatusFilter = ReviewStatusFilter.ALL,
     val selectedIds: Set<Long> = emptySet(),
     val destinationOverrides: Map<Long, Long> = emptyMap(),
     val collapsedSectionIds: Set<Long> = emptySet(),

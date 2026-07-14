@@ -181,6 +181,11 @@ class HomeViewModelTest {
         override suspend fun insertAll(suggestions: List<StoredSuggestion>) = Unit
         override suspend fun replaceAll(suggestions: List<StoredSuggestion>) = Unit
         override suspend fun deleteAll() = Unit
+        override suspend fun setReviewStatus(
+            imageId: Long,
+            status: com.smartfolder.domain.model.ReviewStatus,
+            destinationFolderId: Long?
+        ) = Unit
     }
 
     private class FakeFolderRepository(initialFolders: List<Folder>) : FolderRepository {

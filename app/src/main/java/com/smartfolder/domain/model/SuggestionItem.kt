@@ -9,7 +9,8 @@ data class SuggestionItem(
     val topKScore: Float,
     val topSimilarImages: List<SimilarMatch>,
     val candidateIds: List<Long> = emptyList(),
-    val candidateScores: List<Float> = emptyList()
+    val candidateScores: List<Float> = emptyList(),
+    val reviewStatus: ReviewStatus = ReviewStatus.PENDING
 )
 
 val SuggestionItem.confidenceMargin: Float

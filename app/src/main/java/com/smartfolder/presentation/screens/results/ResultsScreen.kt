@@ -38,6 +38,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -67,6 +68,7 @@ import coil.compose.AsyncImage
 import com.smartfolder.R
 import com.smartfolder.domain.model.Folder
 import com.smartfolder.domain.model.SuggestionItem
+import com.smartfolder.domain.model.SuggestionSortMode
 import com.smartfolder.domain.model.confidenceMargin
 import com.smartfolder.presentation.components.EmptyState
 import com.smartfolder.presentation.components.ErrorBanner
@@ -80,7 +82,8 @@ private const val DUPLICATE_SIMILARITY = 0.98f
 @Composable
 fun ResultsScreen(
     viewModel: ResultsViewModel,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToReview: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
@@ -246,9 +249,15 @@ fun ResultsScreen(
                         unassignedCount = uiState.filteredSuggestions.count { it.suggestedDestinationId == 0L },
                         selectedCount = uiState.selectedCount,
                         threshold = uiState.threshold,
+                        sortMode = uiState.sortMode,
+                        statusFilter = uiState.statusFilter,
+                        hasSuggestions = uiState.allSuggestions.isNotEmpty(),
                         onThresholdChange = viewModel::setThreshold,
+                        onSortModeChange = viewModel::setSortMode,
+                        onStatusFilterChange = viewModel::setStatusFilter,
                         onSelectHighConfidence = viewModel::selectHighConfidence,
-                        onClearSelection = viewModel::clearSelection
+                        onClearSelection = viewModel::clearSelection,
+                        onStartReview = onNavigateToReview
                     )
                 }
             }
@@ -318,9 +327,15 @@ private fun OverviewCard(
     unassignedCount: Int,
     selectedCount: Int,
     threshold: Float,
+    sortMode: SuggestionSortMode,
+    statusFilter: ReviewStatusFilter,
+    hasSuggestions: Boolean,
     onThresholdChange: (Float) -> Unit,
+    onSortModeChange: (SuggestionSortMode) -> Unit,
+    onStatusFilterChange: (ReviewStatusFilter) -> Unit,
     onSelectHighConfidence: () -> Unit,
-    onClearSelection: () -> Unit
+    onClearSelection: () -> Unit,
+    onStartReview: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -363,6 +378,41 @@ private fun OverviewCard(
                 value = threshold,
                 onValueChange = onThresholdChange
             )
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = statusFilter == ReviewStatusFilter.ALL,
+                    onClick = { onStatusFilterChange(ReviewStatusFilter.ALL) },
+                    label = { Text(stringResource(R.string.results_filter_all)) }
+                )
+                FilterChip(
+                    selected = statusFilter == ReviewStatusFilter.PENDING,
+                    onClick = { onStatusFilterChange(ReviewStatusFilter.PENDING) },
+                    label = { Text(stringResource(R.string.results_filter_pending)) }
+                )
+                FilterChip(
+                    selected = statusFilter == ReviewStatusFilter.REVIEWED,
+                    onClick = { onStatusFilterChange(ReviewStatusFilter.REVIEWED) },
+                    label = { Text(stringResource(R.string.results_filter_reviewed)) }
+                )
+            }
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = sortMode == SuggestionSortMode.BY_SCORE,
+                    onClick = { onSortModeChange(SuggestionSortMode.BY_SCORE) },
+                    label = { Text(stringResource(R.string.results_sort_by_score)) }
+                )
+                FilterChip(
+                    selected = sortMode == SuggestionSortMode.BY_UNCERTAINTY,
+                    onClick = { onSortModeChange(SuggestionSortMode.BY_UNCERTAINTY) },
+                    label = { Text(stringResource(R.string.results_sort_by_uncertainty)) }
+                )
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onSelectHighConfidence) {
                     Icon(
@@ -377,6 +427,14 @@ private fun OverviewCard(
                     TextButton(onClick = onClearSelection) {
                         Text(stringResource(R.string.results_clear_selection))
                     }
+                }
+            }
+            if (hasSuggestions) {
+                Button(
+                    onClick = onStartReview,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(stringResource(R.string.results_review_mode))
                 }
             }
         }

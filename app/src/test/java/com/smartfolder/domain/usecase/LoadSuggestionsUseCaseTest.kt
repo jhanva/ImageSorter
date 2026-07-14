@@ -86,6 +86,31 @@ class LoadSuggestionsUseCaseTest {
     }
 
     @Test
+    fun `passes review status through to the suggestion item`() = runTest {
+        val stored = listOf(
+            StoredSuggestion(
+                imageId = 10L,
+                destinationFolderId = 1L,
+                score = 0.9f,
+                secondBestScore = 0.7f,
+                centroidScore = 0.8f,
+                topKScore = 0.95f,
+                topSimilarIds = emptyList(),
+                topSimilarScores = emptyList(),
+                createdAt = 123L,
+                reviewStatus = com.smartfolder.domain.model.ReviewStatus.ACCEPTED
+            )
+        )
+        `when`(suggestionRepository.getAll()).thenReturn(stored)
+        val img10 = ImageInfo(10L, 1L, mock(Uri::class.java), "main.jpg", "h1", 10L, 1L)
+        `when`(imageRepository.getByIds(listOf(10L))).thenReturn(listOf(img10))
+
+        val results = useCase()
+
+        assertEquals(com.smartfolder.domain.model.ReviewStatus.ACCEPTED, results.single().reviewStatus)
+    }
+
+    @Test
     fun `drops suggestions when main image missing`() = runTest {
         val stored = listOf(
             StoredSuggestion(

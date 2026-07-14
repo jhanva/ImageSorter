@@ -16,4 +16,10 @@ interface SuggestionDao {
 
     @Query("DELETE FROM suggestions")
     suspend fun deleteAll()
+
+    @Query("UPDATE suggestions SET reviewStatus = :status WHERE imageId = :imageId")
+    suspend fun updateReviewStatus(imageId: Long, status: String)
+
+    @Query("UPDATE suggestions SET reviewStatus = :status, destinationFolderId = :destinationFolderId WHERE imageId = :imageId")
+    suspend fun updateReviewStatusAndDestination(imageId: Long, status: String, destinationFolderId: Long)
 }

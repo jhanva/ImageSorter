@@ -2,6 +2,7 @@ package com.smartfolder.data.repository
 
 import com.smartfolder.data.local.db.dao.SuggestionDao
 import com.smartfolder.data.local.db.entities.SuggestionEntity
+import com.smartfolder.domain.model.ReviewStatus
 import com.smartfolder.domain.model.StoredSuggestion
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -55,6 +56,68 @@ class SuggestionRepositoryImplTest {
         assertEquals(input[1].secondBestScore, output[1].secondBestScore, 0.0001f)
     }
 
+    @Test
+    fun `roundtrip preserves review status`() = runTest {
+        val dao = FakeSuggestionDao()
+        val repo = SuggestionRepositoryImpl(dao)
+
+        repo.replaceAll(
+            listOf(
+                storedSuggestion(imageId = 1L, reviewStatus = ReviewStatus.ACCEPTED),
+                storedSuggestion(imageId = 2L, reviewStatus = ReviewStatus.SKIPPED),
+                storedSuggestion(imageId = 3L)
+            )
+        )
+        val output = repo.getAll().associateBy { it.imageId }
+
+        assertEquals(ReviewStatus.ACCEPTED, output[1L]?.reviewStatus)
+        assertEquals(ReviewStatus.SKIPPED, output[2L]?.reviewStatus)
+        assertEquals(ReviewStatus.PENDING, output[3L]?.reviewStatus)
+    }
+
+    @Test
+    fun `setReviewStatus updates status and destination`() = runTest {
+        val dao = FakeSuggestionDao()
+        val repo = SuggestionRepositoryImpl(dao)
+        repo.replaceAll(listOf(storedSuggestion(imageId = 1L, destinationFolderId = 100L)))
+
+        repo.setReviewStatus(imageId = 1L, status = ReviewStatus.ACCEPTED, destinationFolderId = 200L)
+
+        val updated = repo.getAll().single()
+        assertEquals(ReviewStatus.ACCEPTED, updated.reviewStatus)
+        assertEquals(200L, updated.destinationFolderId)
+    }
+
+    @Test
+    fun `setReviewStatus without destination keeps existing destination`() = runTest {
+        val dao = FakeSuggestionDao()
+        val repo = SuggestionRepositoryImpl(dao)
+        repo.replaceAll(listOf(storedSuggestion(imageId = 1L, destinationFolderId = 100L)))
+
+        repo.setReviewStatus(imageId = 1L, status = ReviewStatus.SKIPPED, destinationFolderId = null)
+
+        val updated = repo.getAll().single()
+        assertEquals(ReviewStatus.SKIPPED, updated.reviewStatus)
+        assertEquals(100L, updated.destinationFolderId)
+    }
+
+    private fun storedSuggestion(
+        imageId: Long,
+        destinationFolderId: Long = 100L,
+        reviewStatus: ReviewStatus = ReviewStatus.PENDING
+    ) = StoredSuggestion(
+        imageId = imageId,
+        destinationFolderId = destinationFolderId,
+        score = 0.9f,
+        secondBestScore = 0.7f,
+        centroidScore = 0.8f,
+        topKScore = 0.95f,
+        topSimilarIds = emptyList(),
+        topSimilarScores = emptyList(),
+        createdAt = 123L,
+        reviewStatus = reviewStatus
+    )
+
     private class FakeSuggestionDao : SuggestionDao {
         private val data = mutableListOf<SuggestionEntity>()
 
@@ -66,6 +129,26 @@ class SuggestionRepositoryImplTest {
 
         override suspend fun deleteAll() {
             data.clear()
+        }
+
+        override suspend fun updateReviewStatus(imageId: Long, status: String) {
+            data.replaceAll { entity ->
+                if (entity.imageId == imageId) entity.copy(reviewStatus = status) else entity
+            }
+        }
+
+        override suspend fun updateReviewStatusAndDestination(
+            imageId: Long,
+            status: String,
+            destinationFolderId: Long
+        ) {
+            data.replaceAll { entity ->
+                if (entity.imageId == imageId) {
+                    entity.copy(reviewStatus = status, destinationFolderId = destinationFolderId)
+                } else {
+                    entity
+                }
+            }
         }
     }
 }

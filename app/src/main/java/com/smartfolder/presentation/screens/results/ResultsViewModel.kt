@@ -5,8 +5,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartfolder.domain.model.Folder
 import com.smartfolder.domain.model.FolderRole
+import com.smartfolder.domain.model.ReviewStatus
 import com.smartfolder.domain.model.StoredSuggestion
 import com.smartfolder.domain.model.SuggestionItem
+import com.smartfolder.domain.model.SuggestionSortMode
 import com.smartfolder.domain.model.confidenceMargin
 import com.smartfolder.domain.repository.FolderRepository
 import com.smartfolder.domain.repository.SettingsRepository
@@ -62,6 +64,14 @@ class ResultsViewModel @Inject constructor(
                 )
             )
         }
+    }
+
+    fun setSortMode(sortMode: SuggestionSortMode) {
+        _uiState.value = refreshDerivedState(_uiState.value.copy(sortMode = sortMode))
+    }
+
+    fun setStatusFilter(statusFilter: ReviewStatusFilter) {
+        _uiState.value = refreshDerivedState(_uiState.value.copy(statusFilter = statusFilter))
     }
 
     fun toggleSelection(imageId: Long) {
@@ -277,9 +287,17 @@ class ResultsViewModel @Inject constructor(
     }
 
     private fun refreshDerivedState(baseState: ResultsUiState): ResultsUiState {
+        val statusFiltered = when (baseState.statusFilter) {
+            ReviewStatusFilter.ALL -> baseState.allSuggestions
+            ReviewStatusFilter.PENDING ->
+                baseState.allSuggestions.filter { it.reviewStatus == ReviewStatus.PENDING }
+            ReviewStatusFilter.REVIEWED ->
+                baseState.allSuggestions.filter { it.reviewStatus != ReviewStatus.PENDING }
+        }
         val filteredSuggestions = getSuggestionsUseCase(
-            suggestions = baseState.allSuggestions,
-            threshold = baseState.threshold
+            suggestions = statusFiltered,
+            threshold = baseState.threshold,
+            sortMode = baseState.sortMode
         )
         val visibleIds = filteredSuggestions.mapTo(mutableSetOf()) { it.image.id }
         val destinationSections = buildDestinationSections(

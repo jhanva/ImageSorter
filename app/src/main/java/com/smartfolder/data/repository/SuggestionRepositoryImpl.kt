@@ -2,6 +2,7 @@ package com.smartfolder.data.repository
 
 import com.smartfolder.data.local.db.dao.SuggestionDao
 import com.smartfolder.data.local.db.entities.SuggestionEntity
+import com.smartfolder.domain.model.ReviewStatus
 import com.smartfolder.domain.model.StoredSuggestion
 import com.smartfolder.domain.repository.SuggestionRepository
 import javax.inject.Inject
@@ -33,6 +34,14 @@ class SuggestionRepositoryImpl @Inject constructor(
         suggestionDao.deleteAll()
     }
 
+    override suspend fun setReviewStatus(imageId: Long, status: ReviewStatus, destinationFolderId: Long?) {
+        if (destinationFolderId != null) {
+            suggestionDao.updateReviewStatusAndDestination(imageId, status.name, destinationFolderId)
+        } else {
+            suggestionDao.updateReviewStatus(imageId, status.name)
+        }
+    }
+
     private fun SuggestionEntity.toDomain(): StoredSuggestion = StoredSuggestion(
         imageId = imageId,
         destinationFolderId = destinationFolderId,
@@ -44,7 +53,8 @@ class SuggestionRepositoryImpl @Inject constructor(
         topSimilarScores = parseFloatList(topSimilarScores),
         candidateIds = parseLongList(candidateIds),
         candidateScores = parseFloatList(candidateScores),
-        createdAt = createdAt
+        createdAt = createdAt,
+        reviewStatus = ReviewStatus.fromName(reviewStatus)
     )
 
     private fun StoredSuggestion.toEntity(): SuggestionEntity = SuggestionEntity(
@@ -58,7 +68,8 @@ class SuggestionRepositoryImpl @Inject constructor(
         topSimilarScores = topSimilarScores.joinToString(","),
         candidateIds = candidateIds.joinToString(","),
         candidateScores = candidateScores.joinToString(","),
-        createdAt = createdAt
+        createdAt = createdAt,
+        reviewStatus = reviewStatus.name
     )
 
     private fun parseLongList(raw: String): List<Long> {

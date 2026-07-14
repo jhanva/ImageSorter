@@ -20,5 +20,6 @@ data class SuggestionEntity(
     val topSimilarScores: String,
     @androidx.room.ColumnInfo(defaultValue = "") val candidateIds: String = "",
     @androidx.room.ColumnInfo(defaultValue = "") val candidateScores: String = "",
-    val createdAt: Long
+    val createdAt: Long,
+    @androidx.room.ColumnInfo(defaultValue = "PENDING") val reviewStatus: String = "PENDING"
 )

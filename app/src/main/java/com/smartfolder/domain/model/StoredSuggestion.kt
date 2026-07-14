@@ -11,5 +11,6 @@ data class StoredSuggestion(
     val topSimilarScores: List<Float>,
     val candidateIds: List<Long> = emptyList(),
     val candidateScores: List<Float> = emptyList(),
-    val createdAt: Long
+    val createdAt: Long,
+    val reviewStatus: ReviewStatus = ReviewStatus.PENDING
 )

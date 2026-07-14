@@ -278,6 +278,68 @@ class ResultsViewModelTest {
         assertEquals(listOf(3L), state.destinationSections.single().suggestions.map { it.image.id })
     }
 
+    @Test
+    fun `pending filter hides reviewed suggestions`() = runTest(mainDispatcherRule.dispatcher) {
+        val pending = suggestion(id = 1L, name = "pending.png", score = 0.92f, destinationId = destinationA.id)
+        val accepted = suggestion(
+            id = 2L, name = "accepted.png", score = 0.90f, destinationId = destinationA.id,
+            reviewStatus = com.smartfolder.domain.model.ReviewStatus.ACCEPTED
+        )
+        `when`(loadSuggestionsUseCase.invoke()).thenReturn(listOf(pending, accepted))
+        `when`(folderRepository.getByRole(FolderRole.DESTINATION)).thenReturn(listOf(destinationA))
+
+        val viewModel = viewModel()
+
+        awaitState(viewModel) { it.filteredSuggestions.size == 2 }
+        viewModel.setStatusFilter(ReviewStatusFilter.PENDING)
+
+        val state = awaitState(viewModel) { it.filteredSuggestions.size == 1 }
+        assertEquals(listOf(1L), state.filteredSuggestions.map { it.image.id })
+    }
+
+    @Test
+    fun `reviewed filter shows only reviewed suggestions`() = runTest(mainDispatcherRule.dispatcher) {
+        val pending = suggestion(id = 1L, name = "pending.png", score = 0.92f, destinationId = destinationA.id)
+        val skipped = suggestion(
+            id = 2L, name = "skipped.png", score = 0.90f, destinationId = destinationA.id,
+            reviewStatus = com.smartfolder.domain.model.ReviewStatus.SKIPPED
+        )
+        `when`(loadSuggestionsUseCase.invoke()).thenReturn(listOf(pending, skipped))
+        `when`(folderRepository.getByRole(FolderRole.DESTINATION)).thenReturn(listOf(destinationA))
+
+        val viewModel = viewModel()
+
+        awaitState(viewModel) { it.filteredSuggestions.size == 2 }
+        viewModel.setStatusFilter(ReviewStatusFilter.REVIEWED)
+
+        val state = awaitState(viewModel) { it.filteredSuggestions.size == 1 }
+        assertEquals(listOf(2L), state.filteredSuggestions.map { it.image.id })
+    }
+
+    @Test
+    fun `uncertainty sort mode orders ambiguous suggestions first`() = runTest(mainDispatcherRule.dispatcher) {
+        val clear = suggestion(
+            id = 1L, name = "clear.png", score = 0.95f, destinationId = destinationA.id,
+            secondBestScore = 0.40f
+        )
+        val ambiguous = suggestion(
+            id = 2L, name = "ambiguous.png", score = 0.90f, destinationId = destinationA.id,
+            secondBestScore = 0.88f
+        )
+        `when`(loadSuggestionsUseCase.invoke()).thenReturn(listOf(clear, ambiguous))
+        `when`(folderRepository.getByRole(FolderRole.DESTINATION)).thenReturn(listOf(destinationA))
+
+        val viewModel = viewModel()
+
+        awaitState(viewModel) { it.filteredSuggestions.size == 2 }
+        viewModel.setSortMode(com.smartfolder.domain.model.SuggestionSortMode.BY_UNCERTAINTY)
+
+        val state = awaitState(viewModel) {
+            it.filteredSuggestions.map { s -> s.image.id } == listOf(2L, 1L)
+        }
+        assertEquals(listOf(2L, 1L), state.filteredSuggestions.map { it.image.id })
+    }
+
     private suspend fun awaitState(
         viewModel: ResultsViewModel,
         predicate: (ResultsUiState) -> Boolean
@@ -298,7 +360,8 @@ class ResultsViewModelTest {
         name: String,
         score: Float,
         destinationId: Long,
-        secondBestScore: Float = score - 0.1f
+        secondBestScore: Float = score - 0.1f,
+        reviewStatus: com.smartfolder.domain.model.ReviewStatus = com.smartfolder.domain.model.ReviewStatus.PENDING
     ): SuggestionItem {
         return SuggestionItem(
             image = ImageInfo(
@@ -315,7 +378,8 @@ class ResultsViewModelTest {
             secondBestScore = secondBestScore,
             centroidScore = score,
             topKScore = score,
-            topSimilarImages = emptyList()
+            topSimilarImages = emptyList(),
+            reviewStatus = reviewStatus
         )
     }
 

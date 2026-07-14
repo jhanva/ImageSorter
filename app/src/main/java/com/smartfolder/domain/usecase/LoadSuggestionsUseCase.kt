@@ -38,7 +38,8 @@ class LoadSuggestionsUseCase @Inject constructor(
                 topKScore = suggestion.topKScore,
                 topSimilarImages = matches,
                 candidateIds = suggestion.candidateIds,
-                candidateScores = suggestion.candidateScores
+                candidateScores = suggestion.candidateScores,
+                reviewStatus = suggestion.reviewStatus
             )
         }
     }

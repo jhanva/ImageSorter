@@ -11,6 +11,8 @@ import com.smartfolder.presentation.screens.home.HomeScreen
 import com.smartfolder.presentation.screens.home.HomeViewModel
 import com.smartfolder.presentation.screens.results.ResultsScreen
 import com.smartfolder.presentation.screens.results.ResultsViewModel
+import com.smartfolder.presentation.screens.review.ReviewScreen
+import com.smartfolder.presentation.screens.review.ReviewViewModel
 import com.smartfolder.presentation.screens.settings.SettingsScreen
 import com.smartfolder.presentation.screens.settings.SettingsViewModel
 
@@ -62,7 +64,20 @@ fun NavGraph(
                 viewModel = viewModel,
                 onNavigateBack = {
                     navController.popBackStack(Screen.Home.route, inclusive = false)
+                },
+                onNavigateToReview = {
+                    navController.navigate(Screen.Review.route) {
+                        launchSingleTop = true
+                    }
                 }
+            )
+        }
+
+        composable(Screen.Review.route) {
+            val viewModel: ReviewViewModel = hiltViewModel()
+            ReviewScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() }
             )
         }
 

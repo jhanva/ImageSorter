@@ -96,6 +96,27 @@
     <string name="results_expand_section">Expand section</string>
     <string name="results_collapse_section">Collapse section</string>
     <string name="results_preview">Preview image</string>
+    <string name="results_filter_all">All</string>
+    <string name="results_filter_pending">Pending</string>
+    <string name="results_filter_reviewed">Reviewed</string>
+    <string name="results_sort_by_score">Best match first</string>
+    <string name="results_sort_by_uncertainty">Ambiguous first</string>
+    <string name="results_review_mode">Quick review mode</string>
+
+    <!-- Review mode -->
+    <string name="review_title">Quick review</string>
+    <string name="review_progress">Image %1$d of %2$d</string>
+    <string name="review_similar_label">Looks like these images already in the destination:</string>
+    <string name="review_accept_candidate">%1$s (%2$d%%)</string>
+    <string name="review_skip">Skip</string>
+    <string name="review_undo">Undo last decision</string>
+    <string name="review_complete_title">Review complete</string>
+    <string name="review_complete_message">%1$d accepted, %2$d skipped.</string>
+    <string name="review_summary_count">%1$d images</string>
+    <string name="review_apply_moves">Move %1$d accepted images</string>
+    <string name="review_done">Done</string>
+    <string name="review_empty_title">Nothing to review</string>
+    <string name="review_empty_message">All suggestions have been reviewed. Run a new analysis to get more.</string>
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>

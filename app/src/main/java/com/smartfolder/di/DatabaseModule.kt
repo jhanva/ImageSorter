@@ -178,6 +178,14 @@ object DatabaseModule {
         }
     }
 
+    val MIGRATION_7_8: Migration = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "ALTER TABLE `suggestions` ADD COLUMN `reviewStatus` TEXT NOT NULL DEFAULT 'PENDING'"
+            )
+        }
+    }
+
     @Provides
     @Singleton
     fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
@@ -191,6 +199,7 @@ object DatabaseModule {
             .addMigrations(MIGRATION_4_5)
             .addMigrations(MIGRATION_5_6)
             .addMigrations(MIGRATION_6_7)
+            .addMigrations(MIGRATION_7_8)
             .build()
     }
 
