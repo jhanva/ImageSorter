@@ -25,9 +25,9 @@ class HomeVisualsTest {
     @Test
     fun `stage is ready when both folder groups exist`() {
         val state = HomeUiState(
-            destinationFolders = listOf(folder(id = 1, role = FolderRole.DESTINATION, imageCount = 20, indexedCount = 20)),
-            sourceFolders = listOf(folder(id = 2, role = FolderRole.SOURCE, imageCount = 14, indexedCount = 14)),
-            canAnalyze = true
+            destinationFolders = listOf(folder(id = 1, role = FolderRole.DESTINATION)),
+            sourceFolders = listOf(folder(id = 2, role = FolderRole.SOURCE)),
+            canStartTriage = true
         )
 
         val hero = HomeVisuals.buildHeroContent(state)
@@ -38,46 +38,27 @@ class HomeVisualsTest {
     }
 
     @Test
-    fun `stage is indexing while work is in progress`() {
+    fun `progress counts each selected folder group`() {
         val state = HomeUiState(
-            destinationFolders = listOf(folder(id = 1, role = FolderRole.DESTINATION, imageCount = 20, indexedCount = 20)),
-            sourceFolders = listOf(folder(id = 2, role = FolderRole.SOURCE, imageCount = 14, indexedCount = 3)),
-            isIndexingSources = true
+            destinationFolders = listOf(folder(id = 1, role = FolderRole.DESTINATION))
         )
 
         val hero = HomeVisuals.buildHeroContent(state)
 
-        assertEquals(HomeHeroStage.INDEXING, hero.stage)
-        assertFalse(hero.isReady)
-    }
-
-    @Test
-    fun `progress counts folder selection and indexing steps`() {
-        val state = HomeUiState(
-            destinationFolders = listOf(folder(id = 1, role = FolderRole.DESTINATION, imageCount = 20, indexedCount = 20)),
-            sourceFolders = listOf(folder(id = 2, role = FolderRole.SOURCE, imageCount = 14, indexedCount = 3))
-        )
-
-        val hero = HomeVisuals.buildHeroContent(state)
-
-        assertEquals(3, hero.completedSteps)
-        assertEquals(4, hero.totalSteps)
-        assertEquals(0.75f, hero.progress, 0.0001f)
+        assertEquals(1, hero.completedSteps)
+        assertEquals(2, hero.totalSteps)
+        assertEquals(0.5f, hero.progress, 0.0001f)
     }
 
     private fun folder(
         id: Long,
-        role: FolderRole,
-        imageCount: Int,
-        indexedCount: Int
+        role: FolderRole
     ): Folder {
         return Folder(
             id = id,
             uri = TestUri("content://folder/$id"),
             displayName = "Folder $id",
-            role = role,
-            imageCount = imageCount,
-            indexedCount = indexedCount
+            role = role
         )
     }
 }

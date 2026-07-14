@@ -3,18 +3,16 @@ package com.smartfolder.presentation.navigation
 import androidx.compose.runtime.Composable
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import com.smartfolder.presentation.screens.analysis.AnalysisScreen
-import com.smartfolder.presentation.screens.analysis.AnalysisViewModel
+import androidx.navigation.navArgument
 import com.smartfolder.presentation.screens.home.HomeScreen
 import com.smartfolder.presentation.screens.home.HomeViewModel
-import com.smartfolder.presentation.screens.results.ResultsScreen
-import com.smartfolder.presentation.screens.results.ResultsViewModel
-import com.smartfolder.presentation.screens.review.ReviewScreen
-import com.smartfolder.presentation.screens.review.ReviewViewModel
 import com.smartfolder.presentation.screens.settings.SettingsScreen
 import com.smartfolder.presentation.screens.settings.SettingsViewModel
+import com.smartfolder.presentation.screens.triage.TriageScreen
+import com.smartfolder.presentation.screens.triage.TriageViewModel
 
 @Composable
 fun NavGraph(
@@ -28,11 +26,8 @@ fun NavGraph(
         composable(Screen.Home.route) {
             HomeScreen(
                 viewModel = homeViewModel,
-                onNavigateToAnalysis = {
-                    navController.navigate(Screen.Analysis.route)
-                },
-                onNavigateToResults = {
-                    navController.navigate(Screen.Results.route) {
+                onStartTriage = { folder ->
+                    navController.navigate(Screen.Triage.createRoute(folder.id)) {
                         launchSingleTop = true
                     }
                 },
@@ -42,40 +37,12 @@ fun NavGraph(
             )
         }
 
-        composable(Screen.Analysis.route) {
-            val viewModel: AnalysisViewModel = hiltViewModel()
-            AnalysisScreen(
-                viewModel = viewModel,
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToResults = {
-                    navController.navigate(Screen.Results.route) {
-                        launchSingleTop = true
-                    }
-                }
-            )
-        }
-
-        composable(Screen.Results.route) {
-            // Suggestions are loaded from DB in ResultsViewModel.init via
-            // LoadSuggestionsUseCase. AnalyzeImagesUseCase persists them
-            // before navigating here, so no back-stack dependency is needed.
-            val viewModel: ResultsViewModel = hiltViewModel()
-            ResultsScreen(
-                viewModel = viewModel,
-                onNavigateBack = {
-                    navController.popBackStack(Screen.Home.route, inclusive = false)
-                },
-                onNavigateToReview = {
-                    navController.navigate(Screen.Review.route) {
-                        launchSingleTop = true
-                    }
-                }
-            )
-        }
-
-        composable(Screen.Review.route) {
-            val viewModel: ReviewViewModel = hiltViewModel()
-            ReviewScreen(
+        composable(
+            route = Screen.Triage.route,
+            arguments = listOf(navArgument("folderId") { type = NavType.LongType })
+        ) {
+            val viewModel: TriageViewModel = hiltViewModel()
+            TriageScreen(
                 viewModel = viewModel,
                 onNavigateBack = { navController.popBackStack() }
             )

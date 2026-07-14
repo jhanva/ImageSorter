@@ -175,8 +175,16 @@ class SafManager @Inject constructor(
     }
 
     fun getFolderDisplayName(treeUri: Uri): String {
-        val documentFile = DocumentFile.fromTreeUri(context, treeUri)
-        return documentFile?.name ?: treeUri.lastPathSegment ?: "Unknown"
+        val fromProvider = DocumentFile.fromTreeUri(context, treeUri)?.name
+        if (!fromProvider.isNullOrBlank()) return fromProvider
+
+        // Fall back to the last segment of the tree document id
+        // ("primary:DCIM/Camera" -> "Camera") instead of the raw id.
+        val docId = runCatching { DocumentsContract.getTreeDocumentId(treeUri) }.getOrNull()
+        val fromDocId = docId?.substringAfterLast('/')?.substringAfterLast(':')
+        if (!fromDocId.isNullOrBlank()) return fromDocId
+
+        return treeUri.lastPathSegment ?: "Unknown"
     }
 
     fun getDocumentFile(uri: Uri): DocumentFile? {

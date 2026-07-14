@@ -2,10 +2,7 @@ package com.smartfolder.presentation.screens.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.smartfolder.domain.model.ExecutionProfile
-import com.smartfolder.domain.model.ModelChoice
 import com.smartfolder.domain.repository.SettingsRepository
-import com.smartfolder.domain.usecase.ClearCacheUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,29 +12,13 @@ import javax.inject.Inject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val settingsRepository: SettingsRepository,
-    private val clearCacheUseCase: ClearCacheUseCase
+    private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
     init {
-        viewModelScope.launch {
-            settingsRepository.threshold.collect { threshold ->
-                _uiState.value = _uiState.value.copy(threshold = threshold)
-            }
-        }
-        viewModelScope.launch {
-            settingsRepository.modelChoice.collect { choice ->
-                _uiState.value = _uiState.value.copy(modelChoice = choice)
-            }
-        }
-        viewModelScope.launch {
-            settingsRepository.executionProfile.collect { profile ->
-                _uiState.value = _uiState.value.copy(executionProfile = profile)
-            }
-        }
         viewModelScope.launch {
             settingsRepository.darkMode.collect { darkMode ->
                 _uiState.value = _uiState.value.copy(darkMode = darkMode)
@@ -47,24 +28,6 @@ class SettingsViewModel @Inject constructor(
             settingsRepository.dynamicColor.collect { dynamicColor ->
                 _uiState.value = _uiState.value.copy(dynamicColor = dynamicColor)
             }
-        }
-    }
-
-    fun setThreshold(value: Float) {
-        viewModelScope.launch {
-            settingsRepository.setThreshold(value)
-        }
-    }
-
-    fun setModelChoice(choice: ModelChoice) {
-        viewModelScope.launch {
-            settingsRepository.setModelChoice(choice)
-        }
-    }
-
-    fun setExecutionProfile(profile: ExecutionProfile) {
-        viewModelScope.launch {
-            settingsRepository.setExecutionProfile(profile)
         }
     }
 
@@ -78,27 +41,5 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.setDynamicColor(enabled)
         }
-    }
-
-    fun clearCache() {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isClearingCache = true)
-            try {
-                clearCacheUseCase()
-                _uiState.value = _uiState.value.copy(
-                    isClearingCache = false,
-                    message = SettingsMessage.CACHE_CLEARED
-                )
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    isClearingCache = false,
-                    message = SettingsMessage.CACHE_FAILED
-                )
-            }
-        }
-    }
-
-    fun dismissMessage() {
-        _uiState.value = _uiState.value.copy(message = null)
     }
 }

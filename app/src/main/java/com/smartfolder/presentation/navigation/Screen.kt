@@ -2,8 +2,8 @@ package com.smartfolder.presentation.navigation
 
 sealed class Screen(val route: String) {
     data object Home : Screen("home")
-    data object Analysis : Screen("analysis")
-    data object Results : Screen("results")
-    data object Review : Screen("review")
+    data object Triage : Screen("triage/{folderId}") {
+        fun createRoute(folderId: Long): String = "triage/$folderId"
+    }
     data object Settings : Screen("settings")
 }

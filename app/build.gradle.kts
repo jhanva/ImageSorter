@@ -1,4 +1,3 @@
-import java.net.URL
 import java.util.Properties
 import com.android.build.gradle.internal.api.BaseVariantOutputImpl
 
@@ -130,84 +129,6 @@ android.applicationVariants.all {
     }
 }
 
-val downloadModels by tasks.registering {
-    val modelsDir = file("src/main/assets/models")
-    val models = mapOf(
-        "mobilenet_v3_small.tflite" to mapOf(
-            "url" to "https://storage.googleapis.com/mediapipe-models/image_embedder/mobilenet_v3_small/float32/latest/mobilenet_v3_small.tflite",
-            "minSize" to "10000"
-        ),
-        "mobilenet_v3_large.tflite" to mapOf(
-            "url" to "https://storage.googleapis.com/mediapipe-models/image_embedder/mobilenet_v3_large/float32/latest/mobilenet_v3_large.tflite",
-            "minSize" to "10000"
-        ),
-        "mobileclip_s0_image.onnx" to mapOf(
-            "url" to "https://huggingface.co/Xenova/mobileclip_s0/resolve/main/onnx/vision_model.onnx",
-            "minSize" to "40000000"
-        ),
-        // CCIP feature extractor: anime character identity embeddings (768-d).
-        "ccip_caformer_24_feat.onnx" to mapOf(
-            "url" to "https://huggingface.co/deepghs/ccip_onnx/resolve/main/ccip-caformer-24-randaug-pruned/model_feat.onnx",
-            "minSize" to "100000000"
-        )
-    )
-
-    outputs.dir(modelsDir)
-
-    doLast {
-        modelsDir.mkdirs()
-        models.forEach { (name, config) ->
-            val outputFile = File(modelsDir, name)
-            val urlStr = config["url"]!!
-            val minSize = config["minSize"]!!.toLong()
-
-            if (outputFile.exists() && outputFile.length() >= minSize) {
-                println("$name already exists (${outputFile.length()} bytes), skipping download")
-                return@forEach
-            }
-
-            val maxRetries = 3
-            for (attempt in 1..maxRetries) {
-                println("Downloading $name (attempt $attempt/$maxRetries)...")
-                val tempFile = File(modelsDir, "$name.tmp")
-                try {
-                    val connection = URL(urlStr).openConnection().apply {
-                        connectTimeout = 30_000
-                        readTimeout = 120_000
-                    }
-                    connection.getInputStream().use { input ->
-                        tempFile.outputStream().use { output ->
-                            input.copyTo(output)
-                        }
-                    }
-
-                    if (tempFile.length() < minSize) {
-                        tempFile.delete()
-                        throw RuntimeException(
-                            "$name download too small: ${tempFile.length()} bytes (expected >= $minSize)"
-                        )
-                    }
-
-                    tempFile.renameTo(outputFile)
-                    println("Downloaded $name (${outputFile.length()} bytes)")
-                    return@forEach
-                } catch (e: Exception) {
-                    tempFile.delete()
-                    if (attempt == maxRetries) {
-                        throw RuntimeException("Failed to download $name after $maxRetries attempts: ${e.message}", e)
-                    }
-                    println("Attempt $attempt failed: ${e.message}. Retrying...")
-                    Thread.sleep(2000L * attempt)
-                }
-            }
-        }
-    }
-}
-
-tasks.named("preBuild") {
-    dependsOn(downloadModels)
-}
-
 dependencies {
     // Core
     implementation("androidx.core:core-ktx:1.12.0")
@@ -243,12 +164,6 @@ dependencies {
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-
-    // MediaPipe for image embeddings (MobileNet V3)
-    implementation("com.google.mediapipe:tasks-vision:0.10.9")
-
-    // ONNX Runtime for MobileCLIP-S0 semantic embeddings
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.18.0")
 
     // DocumentFile for SAF
     implementation("androidx.documentfile:documentfile:1.0.1")

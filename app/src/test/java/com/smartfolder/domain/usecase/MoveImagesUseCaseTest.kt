@@ -4,21 +4,16 @@ import android.net.Uri
 import com.smartfolder.data.saf.MoveResult
 import com.smartfolder.data.saf.SafFileOps
 import com.smartfolder.domain.model.ImageInfo
-import com.smartfolder.domain.repository.ImageRepository
-import com.smartfolder.domain.repository.TransactionRunner
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 import org.mockito.Mockito.mock
-import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 
 class MoveImagesUseCaseTest {
 
     private lateinit var safFileOps: SafFileOps
-    private lateinit var imageRepository: ImageRepository
-    private lateinit var transactionRunner: TransactionRunner
     private lateinit var useCase: MoveImagesUseCase
 
     private val destUri = mock(Uri::class.java)
@@ -26,11 +21,7 @@ class MoveImagesUseCaseTest {
     @Before
     fun setup() {
         safFileOps = mock(SafFileOps::class.java)
-        imageRepository = mock(ImageRepository::class.java)
-        transactionRunner = object : TransactionRunner {
-            override suspend fun <T> runInTransaction(block: suspend () -> T): T = block()
-        }
-        useCase = MoveImagesUseCase(safFileOps, imageRepository, transactionRunner)
+        useCase = MoveImagesUseCase(safFileOps)
     }
 
     @Test
@@ -43,7 +34,7 @@ class MoveImagesUseCaseTest {
     }
 
     @Test
-    fun `successful move increments moved count and deletes from repo`() = runTest {
+    fun `successful move increments moved count`() = runTest {
         val imageUri = mock(Uri::class.java)
         val newUri = mock(Uri::class.java)
         val image = ImageInfo(1L, 1L, imageUri, "test.jpg", "hash", 1000L, 100L)
@@ -56,7 +47,6 @@ class MoveImagesUseCaseTest {
         assertEquals(1, report.moved)
         assertEquals(0, report.copiedOnly)
         assertEquals(0, report.failed)
-        verify(imageRepository).delete(image)
     }
 
     @Test

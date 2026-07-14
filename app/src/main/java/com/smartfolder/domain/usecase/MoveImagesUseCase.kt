@@ -4,15 +4,11 @@ import android.net.Uri
 import com.smartfolder.data.saf.MoveResult
 import com.smartfolder.data.saf.SafFileOps
 import com.smartfolder.domain.model.ImageInfo
-import com.smartfolder.domain.repository.ImageRepository
-import com.smartfolder.domain.repository.TransactionRunner
 import kotlinx.coroutines.yield
 import javax.inject.Inject
 
 class MoveImagesUseCase @Inject constructor(
-    private val safFileOps: SafFileOps,
-    private val imageRepository: ImageRepository,
-    private val transactionRunner: TransactionRunner
+    private val safFileOps: SafFileOps
 ) {
     data class MovedEntry(
         val image: ImageInfo,
@@ -50,21 +46,9 @@ class MoveImagesUseCase @Inject constructor(
 
             when (result) {
                 is MoveResult.Moved -> {
-                    try {
-                        transactionRunner.runInTransaction {
-                            imageRepository.delete(image)
-                        }
-                        moved++
-                        movedImageIds.add(image.id)
-                        movedEntries.add(MovedEntry(image = image, newUri = result.newUri))
-                    } catch (e: Exception) {
-                        // File was moved but DB delete failed; count as moved
-                        // but log error so user knows DB is inconsistent
-                        moved++
-                        movedImageIds.add(image.id)
-                        movedEntries.add(MovedEntry(image = image, newUri = result.newUri))
-                        errors.add("${image.displayName}: moved but DB cleanup failed")
-                    }
+                    moved++
+                    movedImageIds.add(image.id)
+                    movedEntries.add(MovedEntry(image = image, newUri = result.newUri))
                 }
                 is MoveResult.CopiedOnly -> {
                     copiedOnly++

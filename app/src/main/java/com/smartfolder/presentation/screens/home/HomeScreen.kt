@@ -22,15 +22,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -56,10 +54,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.smartfolder.R
 import com.smartfolder.domain.model.Folder
-import com.smartfolder.domain.model.IndexingProgress
 import com.smartfolder.presentation.components.ErrorBanner
 import com.smartfolder.presentation.components.FolderSelectionBottomSheet
-import com.smartfolder.presentation.components.ProgressIndicator
 import com.smartfolder.presentation.visual.HomeHeroStage
 import com.smartfolder.presentation.visual.HomeVisuals
 
@@ -67,8 +63,7 @@ import com.smartfolder.presentation.visual.HomeVisuals
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel,
-    onNavigateToAnalysis: () -> Unit,
-    onNavigateToResults: () -> Unit,
+    onStartTriage: (Folder) -> Unit,
     onNavigateToSettings: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -76,12 +71,25 @@ fun HomeScreen(
     var showFolderSheet by remember { mutableStateOf(false) }
     var pendingRole by remember { mutableStateOf<FolderSelectRole?>(null) }
     var folderPendingRemoval by remember { mutableStateOf<Folder?>(null) }
+    var showSourcePicker by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val hero = HomeVisuals.buildHeroContent(uiState)
-    val isIndexing = uiState.isIndexingDestinations || uiState.isIndexingSources
 
-    androidx.compose.runtime.LaunchedEffect(Unit) {
-        viewModel.refreshPendingReview()
+    // The image-folder sheet is only a browsing aid: the actual grant comes
+    // from the system OpenDocumentTree dialog, pre-positioned at the chosen
+    // folder so the user just confirms it. Constructed tree uris cannot get
+    // persistable write permission.
+    val folderPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        val role = pendingRole
+        pendingRole = null
+        if (uri != null && role != null) {
+            when (role) {
+                FolderSelectRole.DESTINATION -> viewModel.addDestinationFolder(uri)
+                FolderSelectRole.SOURCE -> viewModel.addSourceFolder(uri)
+            }
+        }
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -91,36 +99,23 @@ fun HomeScreen(
             viewModel.refreshAvailableImageFolders()
             showFolderSheet = true
         } else {
-            viewModel.dismissError()
             pendingRole = null
         }
     }
 
-    fun hasImagePermission(): Boolean {
+    fun openFolderPicker(role: FolderSelectRole) {
+        pendingRole = role
         val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             Manifest.permission.READ_MEDIA_IMAGES
         } else {
             Manifest.permission.READ_EXTERNAL_STORAGE
         }
-        return ContextCompat.checkSelfPermission(
+        val granted = ContextCompat.checkSelfPermission(
             context,
             permission
         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-    }
-
-    fun requestImagePermission() {
-        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Manifest.permission.READ_MEDIA_IMAGES
-        } else {
-            Manifest.permission.READ_EXTERNAL_STORAGE
-        }
-        permissionLauncher.launch(permission)
-    }
-
-    fun openFolderPicker(role: FolderSelectRole) {
-        pendingRole = role
-        if (!hasImagePermission()) {
-            requestImagePermission()
+        if (!granted) {
+            permissionLauncher.launch(permission)
             return
         }
         viewModel.refreshAvailableImageFolders()
@@ -129,7 +124,14 @@ fun HomeScreen(
 
     fun handleHeroAction() {
         when {
-            uiState.canAnalyze && !isIndexing -> onNavigateToAnalysis()
+            uiState.canStartTriage -> {
+                val sources = uiState.sourceFolders
+                if (sources.size == 1) {
+                    onStartTriage(sources.first())
+                } else {
+                    showSourcePicker = true
+                }
+            }
             uiState.destinationFolders.isEmpty() -> openFolderPicker(FolderSelectRole.DESTINATION)
             else -> openFolderPicker(FolderSelectRole.SOURCE)
         }
@@ -146,16 +148,43 @@ fun HomeScreen(
             },
             onSelect = { selected ->
                 showFolderSheet = false
-                val folderUri = DocumentsContract.buildTreeDocumentUri(
+                val initialUri = DocumentsContract.buildDocumentUri(
                     "com.android.externalstorage.documents",
                     selected.documentId
                 )
-                when (pendingRole) {
-                    FolderSelectRole.DESTINATION -> viewModel.addDestinationFolder(folderUri)
-                    FolderSelectRole.SOURCE -> viewModel.addSourceFolder(folderUri)
-                    null -> Unit
+                folderPickerLauncher.launch(initialUri)
+            }
+        )
+    }
+
+    if (showSourcePicker) {
+        AlertDialog(
+            onDismissRequest = { showSourcePicker = false },
+            title = { Text(stringResource(R.string.triage_pick_source_title)) },
+            text = {
+                Column {
+                    uiState.sourceFolders.forEach { folder ->
+                        TextButton(
+                            onClick = {
+                                showSourcePicker = false
+                                onStartTriage(folder)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = folder.displayName,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
                 }
-                pendingRole = null
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showSourcePicker = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
             }
         )
     }
@@ -187,16 +216,7 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Column {
-                        Text(stringResource(R.string.app_name))
-                        Text(
-                            text = stringResource(R.string.home_subtitle),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
+                title = { Text(stringResource(R.string.app_name)) },
                 actions = {
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(
@@ -224,20 +244,14 @@ fun HomeScreen(
                 stage = hero.stage,
                 progress = hero.progress,
                 stepsLabel = stringResource(R.string.hero_steps, hero.completedSteps, hero.totalSteps),
-                primaryEnabled = !isIndexing,
-                pendingReviewCount = uiState.pendingReviewCount,
-                onPrimaryAction = ::handleHeroAction,
-                onContinueReview = onNavigateToResults
+                onPrimaryAction = ::handleHeroAction
             )
 
             FolderSection(
                 title = stringResource(R.string.home_destinations_title),
                 emptyMessage = stringResource(R.string.home_destinations_empty),
                 folders = uiState.destinationFolders,
-                isIndexing = uiState.isIndexingDestinations,
-                progress = uiState.destinationIndexingProgress,
                 onAddFolder = { openFolderPicker(FolderSelectRole.DESTINATION) },
-                onReindexFolder = viewModel::reindexFolder,
                 onRemoveFolder = { folderPendingRemoval = it }
             )
 
@@ -245,10 +259,7 @@ fun HomeScreen(
                 title = stringResource(R.string.home_sources_title),
                 emptyMessage = stringResource(R.string.home_sources_empty),
                 folders = uiState.sourceFolders,
-                isIndexing = uiState.isIndexingSources,
-                progress = uiState.sourceIndexingProgress,
                 onAddFolder = { openFolderPicker(FolderSelectRole.SOURCE) },
-                onReindexFolder = viewModel::reindexFolder,
                 onRemoveFolder = { folderPendingRemoval = it }
             )
         }
@@ -265,25 +276,19 @@ private fun HeroCard(
     stage: HomeHeroStage,
     progress: Float,
     stepsLabel: String,
-    primaryEnabled: Boolean,
-    pendingReviewCount: Int,
-    onPrimaryAction: () -> Unit,
-    onContinueReview: () -> Unit
+    onPrimaryAction: () -> Unit
 ) {
     val title = when (stage) {
         HomeHeroStage.SETUP -> stringResource(R.string.hero_setup_title)
-        HomeHeroStage.INDEXING -> stringResource(R.string.hero_indexing_title)
         HomeHeroStage.READY -> stringResource(R.string.hero_ready_title)
     }
     val subtitle = when (stage) {
         HomeHeroStage.SETUP -> stringResource(R.string.hero_setup_subtitle)
-        HomeHeroStage.INDEXING -> stringResource(R.string.hero_indexing_subtitle)
         HomeHeroStage.READY -> stringResource(R.string.hero_ready_subtitle)
     }
     val actionLabel = when (stage) {
         HomeHeroStage.SETUP -> stringResource(R.string.action_choose_folders)
-        HomeHeroStage.INDEXING -> stringResource(R.string.action_indexing)
-        HomeHeroStage.READY -> stringResource(R.string.action_analyze)
+        HomeHeroStage.READY -> stringResource(R.string.action_start_triage)
     }
 
     Card(
@@ -323,18 +328,9 @@ private fun HeroCard(
             )
             Button(
                 onClick = onPrimaryAction,
-                enabled = primaryEnabled,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(actionLabel)
-            }
-            if (pendingReviewCount > 0) {
-                TextButton(
-                    onClick = onContinueReview,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(stringResource(R.string.action_continue_review, pendingReviewCount))
-                }
             }
         }
     }
@@ -345,10 +341,7 @@ private fun FolderSection(
     title: String,
     emptyMessage: String,
     folders: List<Folder>,
-    isIndexing: Boolean,
-    progress: IndexingProgress,
     onAddFolder: () -> Unit,
-    onReindexFolder: (Folder) -> Unit,
     onRemoveFolder: (Folder) -> Unit
 ) {
     Card(
@@ -401,21 +394,9 @@ private fun FolderSection(
                     }
                     FolderRow(
                         folder = folder,
-                        enabled = !isIndexing,
-                        onReindex = { onReindexFolder(folder) },
                         onRemove = { onRemoveFolder(folder) }
                     )
                 }
-            }
-
-            if (isIndexing) {
-                Spacer(modifier = Modifier.size(6.dp))
-                ProgressIndicator(
-                    phaseLabel = stringResource(R.string.action_indexing),
-                    current = progress.current,
-                    total = progress.total,
-                    currentFileName = progress.currentFileName
-                )
             }
         }
     }
@@ -424,12 +405,8 @@ private fun FolderSection(
 @Composable
 private fun FolderRow(
     folder: Folder,
-    enabled: Boolean,
-    onReindex: () -> Unit,
     onRemove: () -> Unit
 ) {
-    var menuExpanded by remember { mutableStateOf(false) }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -460,41 +437,17 @@ private fun FolderRow(
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = if (folder.imageCount > 0) {
-                    stringResource(R.string.folder_indexed_count, folder.indexedCount, folder.imageCount)
-                } else {
-                    stringResource(R.string.folder_image_count, folder.imageCount)
-                },
+                text = stringResource(R.string.folder_image_count, folder.imageCount),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Box {
-            IconButton(onClick = { menuExpanded = true }, enabled = enabled) {
-                Icon(
-                    imageVector = Icons.Default.MoreVert,
-                    contentDescription = stringResource(R.string.folder_options)
-                )
-            }
-            DropdownMenu(
-                expanded = menuExpanded,
-                onDismissRequest = { menuExpanded = false }
-            ) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.menu_reindex)) },
-                    onClick = {
-                        menuExpanded = false
-                        onReindex()
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.menu_remove)) },
-                    onClick = {
-                        menuExpanded = false
-                        onRemove()
-                    }
-                )
-            }
+        IconButton(onClick = onRemove) {
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = stringResource(R.string.menu_remove),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

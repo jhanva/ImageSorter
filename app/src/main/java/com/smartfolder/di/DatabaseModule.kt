@@ -5,11 +5,7 @@ import androidx.room.Room
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.smartfolder.data.local.db.AppDatabase
-import com.smartfolder.data.local.db.dao.DecisionDao
-import com.smartfolder.data.local.db.dao.EmbeddingDao
 import com.smartfolder.data.local.db.dao.FolderDao
-import com.smartfolder.data.local.db.dao.ImageDao
-import com.smartfolder.data.local.db.dao.SuggestionDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -186,6 +182,16 @@ object DatabaseModule {
         }
     }
 
+    // The app dropped ML indexing and suggestions: only folders remain.
+    val MIGRATION_8_9: Migration = object : Migration(8, 9) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("DROP TABLE IF EXISTS `embeddings`")
+            db.execSQL("DROP TABLE IF EXISTS `suggestions`")
+            db.execSQL("DROP TABLE IF EXISTS `decisions`")
+            db.execSQL("DROP TABLE IF EXISTS `images`")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
@@ -200,21 +206,10 @@ object DatabaseModule {
             .addMigrations(MIGRATION_5_6)
             .addMigrations(MIGRATION_6_7)
             .addMigrations(MIGRATION_7_8)
+            .addMigrations(MIGRATION_8_9)
             .build()
     }
 
     @Provides
     fun provideFolderDao(database: AppDatabase): FolderDao = database.folderDao()
-
-    @Provides
-    fun provideImageDao(database: AppDatabase): ImageDao = database.imageDao()
-
-    @Provides
-    fun provideEmbeddingDao(database: AppDatabase): EmbeddingDao = database.embeddingDao()
-
-    @Provides
-    fun provideDecisionDao(database: AppDatabase): DecisionDao = database.decisionDao()
-
-    @Provides
-    fun provideSuggestionDao(database: AppDatabase): SuggestionDao = database.suggestionDao()
 }

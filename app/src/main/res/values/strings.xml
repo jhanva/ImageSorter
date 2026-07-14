@@ -12,26 +12,18 @@
     <string name="action_undo">Undo</string>
 
     <!-- Home -->
-    <string name="home_subtitle">Offline image routing for anime and game art</string>
     <string name="hero_setup_title">Set up your sorter</string>
     <string name="hero_setup_subtitle">Add destination folders (your organized categories) and source folders (the unsorted ones).</string>
-    <string name="hero_indexing_title">Indexing folders</string>
-    <string name="hero_indexing_subtitle">Keep the app open while local embeddings are built.</string>
     <string name="hero_ready_title">Ready to sort</string>
-    <string name="hero_ready_subtitle">Analyze indexes anything pending and suggests a folder for every image.</string>
+    <string name="hero_ready_subtitle">Tap the button and move each image to its folder with a single tap.</string>
     <string name="hero_steps">%1$d of %2$d steps complete</string>
     <string name="action_choose_folders">Choose folders</string>
-    <string name="action_analyze">Analyze</string>
-    <string name="action_indexing">Indexing…</string>
-    <string name="action_continue_review">Continue review (%1$d pending)</string>
     <string name="home_destinations_title">Destinations</string>
     <string name="home_destinations_empty">Add the folders you want images routed into.</string>
     <string name="home_sources_title">Sources</string>
     <string name="home_sources_empty">Add one or more folders with unsorted images.</string>
     <string name="home_add_folder">Add folder</string>
-    <string name="folder_indexed_count">%1$d/%2$d indexed</string>
     <string name="folder_image_count">%1$d images</string>
-    <string name="menu_reindex">Re-index</string>
     <string name="menu_remove">Remove</string>
     <string name="remove_folder_title">Remove folder?</string>
     <string name="remove_folder_message">"%1$s" will be removed from the app. No files are deleted from the device.</string>
@@ -39,84 +31,25 @@
 
     <!-- Folder picker sheet -->
     <string name="sheet_title">Choose an image folder</string>
-    <string name="sheet_subtitle">Folders come from the device media index.</string>
+    <string name="sheet_subtitle">Pick a folder, then confirm it in the system dialog to grant access.</string>
     <string name="sheet_loading">Loading folders…</string>
     <string name="sheet_empty_title">No image folders found</string>
     <string name="sheet_empty_message">Grant image access and try again.</string>
     <string name="sheet_use">Use</string>
 
-    <!-- Analysis -->
-    <string name="analysis_title">Analysis</string>
-    <string name="analysis_subtitle">Everything runs locally on this device</string>
-    <string name="analysis_phase_preparing">Preparing analysis</string>
-    <string name="analysis_phase_indexing_destinations">Indexing destinations</string>
-    <string name="analysis_phase_indexing_sources">Indexing sources</string>
-    <string name="analysis_phase_centroid">Preparing folder fingerprints</string>
-    <string name="analysis_phase_comparing">Comparing images</string>
-    <string name="analysis_phase_complete">Analysis complete</string>
-    <string name="analysis_phase_stopped">Analysis stopped</string>
-    <string name="analysis_progress_count">%1$d of %2$d processed</string>
-    <string name="analysis_progress_preparing">Preparing local work</string>
-    <string name="analysis_cancel_title">Cancel analysis</string>
-    <string name="analysis_cancel_message">Progress will be lost. Cancel the current analysis?</string>
-    <string name="analysis_cancel_confirm">Cancel analysis</string>
-    <string name="analysis_cancel_continue">Continue</string>
-    <string name="analysis_go_back">Go back</string>
-    <string name="analysis_done_title">Suggestions ready</string>
-    <string name="analysis_done_message">%1$d suggestions were generated. Review them and move images in batches.</string>
-    <string name="analysis_open_results">Open results</string>
-
-    <!-- Results -->
-    <string name="results_title">Review</string>
-    <string name="results_subtitle">%1$d visible suggestions</string>
-    <string name="results_groups_count">%1$d groups</string>
-    <string name="results_unassigned_count">%1$d unassigned</string>
-    <string name="results_selected_count">%1$d selected</string>
-    <string name="results_threshold_label">Similarity threshold: %1$d%%</string>
-    <string name="results_select_confident">Select high confidence</string>
-    <string name="results_clear_selection">Clear selection</string>
-    <string name="results_section_images">%1$d images</string>
-    <string name="results_section_select_all">Select all</string>
-    <string name="results_unassigned_section">Unassigned</string>
-    <string name="results_move_selected">Move %1$d selected</string>
-    <string name="results_match_label">Match</string>
-    <string name="results_margin_label">Margin</string>
-    <string name="results_possible_duplicate">Possible duplicate</string>
-    <string name="results_choose_destination">Choose destination</string>
-    <string name="results_change_destination">Change</string>
-    <string name="results_moved_summary">Moved: %1$d</string>
-    <string name="results_moved_summary_detailed">Moved: %1$d, Copied: %2$d, Failed: %3$d</string>
-    <string name="results_restored_summary">Restored: %1$d</string>
-    <string name="results_empty_title">No suggestions yet</string>
-    <string name="results_empty_message">Run an analysis to generate destination suggestions.</string>
-    <string name="results_empty_filtered_title">Nothing above the current threshold</string>
-    <string name="results_empty_filtered_message">Lower the threshold to review weaker matches.</string>
-    <string name="results_write_denied">Write permission denied. Could not move the selected images.</string>
-    <string name="results_write_request_failed">Could not request write permission for the selected images.</string>
-    <string name="results_expand_section">Expand section</string>
-    <string name="results_collapse_section">Collapse section</string>
-    <string name="results_preview">Preview image</string>
-    <string name="results_filter_all">All</string>
-    <string name="results_filter_pending">Pending</string>
-    <string name="results_filter_reviewed">Reviewed</string>
-    <string name="results_sort_by_score">Best match first</string>
-    <string name="results_sort_by_uncertainty">Ambiguous first</string>
-    <string name="results_review_mode">Quick review mode</string>
-
-    <!-- Review mode -->
-    <string name="review_title">Quick review</string>
-    <string name="review_progress">Image %1$d of %2$d</string>
-    <string name="review_similar_label">Looks like these images already in the destination:</string>
-    <string name="review_accept_candidate">%1$s (%2$d%%)</string>
-    <string name="review_skip">Skip</string>
-    <string name="review_undo">Undo last decision</string>
-    <string name="review_complete_title">Review complete</string>
-    <string name="review_complete_message">%1$d accepted, %2$d skipped.</string>
-    <string name="review_summary_count">%1$d images</string>
-    <string name="review_apply_moves">Move %1$d accepted images</string>
-    <string name="review_done">Done</string>
-    <string name="review_empty_title">Nothing to review</string>
-    <string name="review_empty_message">All suggestions have been reviewed. Run a new analysis to get more.</string>
+    <!-- Triage -->
+    <string name="triage_title">Sort images</string>
+    <string name="triage_progress">%1$d left - %2$d moved</string>
+    <string name="triage_skip">Skip</string>
+    <string name="triage_undo">Undo last action</string>
+    <string name="triage_complete_title">Folder sorted</string>
+    <string name="triage_complete_message">%1$d moved, %2$d skipped.</string>
+    <string name="triage_summary_count">%1$d images</string>
+    <string name="triage_done">Done</string>
+    <string name="triage_empty_title">No images here</string>
+    <string name="triage_empty_message">This folder has no images to sort.</string>
+    <string name="triage_pick_source_title">Which folder do you want to sort?</string>
+    <string name="action_start_triage">Start sorting</string>
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>
@@ -133,7 +66,9 @@
     <string name="profile_performance">Performance</string>
     <string name="settings_appearance_title">Appearance</string>
     <string name="settings_dynamic_color">System colors (Material You)</string>
+    <string name="settings_dynamic_color_subtitle">Use your wallpaper colors in the app</string>
     <string name="settings_dark_mode">Dark mode</string>
+    <string name="settings_dark_mode_subtitle">Always use the dark theme</string>
     <string name="settings_clear_cache">Clear all cache</string>
     <string name="settings_clear_cache_title">Clear all cache</string>
     <string name="settings_clear_cache_message">All indexed folders, embeddings and suggestions will be deleted. This cannot be undone.</string>
