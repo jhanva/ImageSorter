@@ -30,6 +30,30 @@ internal class MobileClipSession private constructor(
             return if (size > 0) size else fallback
         }
 
+        private fun materializeAsset(
+            context: Context,
+            assetPath: String,
+            modelFileName: String
+        ): java.io.File {
+            val modelsDir = java.io.File(context.cacheDir, "models")
+            if (!modelsDir.exists()) modelsDir.mkdirs()
+            val modelFile = java.io.File(modelsDir, modelFileName)
+            if (modelFile.exists() && modelFile.length() > 0) {
+                return modelFile
+            }
+            val tempFile = java.io.File(modelsDir, "$modelFileName.tmp")
+            context.assets.open(assetPath).use { input ->
+                tempFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            if (!tempFile.renameTo(modelFile)) {
+                tempFile.delete()
+                error("Could not materialize model asset: $assetPath")
+            }
+            return modelFile
+        }
+
         suspend fun create(
             context: Context,
             modelFileName: String,
@@ -44,18 +68,33 @@ internal class MobileClipSession private constructor(
                 }
                 val env = OrtEnvironment.getEnvironment()
                 val cpuCount = Runtime.getRuntime().availableProcessors()
+                // Split intra-op threads across the pool so concurrent sessions don't
+                // oversubscribe the CPU (poolSize sessions running at once).
+                val intraOpThreads = (cpuCount / poolSize.coerceAtLeast(1)).coerceIn(1, 4)
                 val opts = OrtSession.SessionOptions().apply {
-                    // Split intra-op threads across the pool so concurrent sessions don't
-                    // oversubscribe the CPU (poolSize sessions running at once).
-                    setIntraOpNumThreads(
-                        (cpuCount / poolSize.coerceAtLeast(1)).coerceIn(1, 4)
-                    )
-                    runCatching { addNnapi() }.onFailure {
-                        Log.w(TAG, "NNAPI delegate unavailable: ${it.message}")
+                    val xnnpack = runCatching {
+                        addXnnpack(mapOf("intra_op_num_threads" to intraOpThreads.toString()))
+                    }
+                    if (xnnpack.isSuccess) {
+                        // XNNPACK runs on its own thread pool; keep ORT's at 1 to avoid
+                        // contention. NNAPI is skipped: partitioning the graph between
+                        // both providers hurts more than it helps for this model.
+                        setIntraOpNumThreads(1)
+                        Log.i(TAG, "XNNPACK enabled with $intraOpThreads threads")
+                    } else {
+                        setIntraOpNumThreads(intraOpThreads)
+                        Log.w(TAG, "XNNPACK unavailable, falling back: ${xnnpack.exceptionOrNull()?.message}")
+                        runCatching { addNnapi() }.onFailure {
+                            Log.w(TAG, "NNAPI delegate unavailable: ${it.message}")
+                        }
                     }
                 }
-                val modelBytes = context.assets.open(assetPath).use { it.readBytes() }
-                val session = env.createSession(modelBytes, opts)
+                // Create the session from a file path instead of a byte array: loading the
+                // model with readBytes() allocates the whole file (plus a transient copy)
+                // on the constrained Java heap and causes OutOfMemoryError with large
+                // models. From a path, ONNX Runtime loads the model in native memory.
+                val modelFile = materializeAsset(context, assetPath, modelFileName)
+                val session = env.createSession(modelFile.absolutePath, opts)
                 val inputName = session.inputNames.firstOrNull()
                     ?: error("ONNX model has no inputs: $modelFileName")
                 val inputShape = session.inputInfo[inputName]
