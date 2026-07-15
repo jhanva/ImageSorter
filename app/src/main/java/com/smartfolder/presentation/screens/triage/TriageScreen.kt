@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -230,25 +231,42 @@ private fun DestinationButtons(
     onSkip: () -> Unit,
     onDelete: () -> Unit
 ) {
+    // Density adapts to the folder count so up to 16 destinations stay
+    // visible without scrolling; positions stay fixed for muscle memory.
+    val count = uiState.destinations.size
+    val columns = when {
+        count <= 4 -> 2
+        count <= 9 -> 3
+        else -> 4
+    }
+    val buttonHeight = if (count <= 6) 52.dp else 48.dp
+    val visibleRows = ((count + columns - 1) / columns).coerceIn(1, 4)
+    val gridHeight = buttonHeight * visibleRows + 8.dp * (visibleRows - 1)
+
     Column(
         modifier = Modifier.padding(bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         LazyVerticalGrid(
-            columns = GridCells.Fixed(if (uiState.destinations.size <= 4) 2 else 3),
+            columns = GridCells.Fixed(columns),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.heightIn(max = 180.dp)
+            modifier = Modifier.heightIn(max = gridHeight)
         ) {
             items(uiState.destinations, key = { it.id }) { destination ->
                 Button(
                     onClick = { onMove(destination.id) },
                     enabled = !uiState.isBusy,
-                    contentPadding = ButtonDefaults.ContentPadding,
-                    modifier = Modifier.heightIn(min = 52.dp)
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
+                    modifier = Modifier.heightIn(min = buttonHeight)
                 ) {
                     Text(
                         text = destination.displayName,
+                        style = if (columns == 4) {
+                            MaterialTheme.typography.labelMedium
+                        } else {
+                            MaterialTheme.typography.labelLarge
+                        },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
