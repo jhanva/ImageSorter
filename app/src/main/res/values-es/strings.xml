@@ -42,6 +42,11 @@
     <string name="triage_progress">%1$d restantes - %2$d movidas</string>
     <string name="triage_skip">Omitir</string>
     <string name="triage_delete">Eliminar</string>
+    <string name="triage_nav_previous">Imagen anterior</string>
+    <string name="triage_nav_next">Imagen siguiente</string>
+    <string name="triage_jump_title">Saltar a posicion</string>
+    <string name="triage_jump_position">Imagen %1$d de %2$d</string>
+    <string name="triage_jump_go">Ir</string>
 
     <!-- Papelera -->
     <string name="trash_title">Papelera</string>

@@ -42,6 +42,11 @@
     <string name="triage_progress">%1$d left - %2$d moved</string>
     <string name="triage_skip">Skip</string>
     <string name="triage_delete">Delete</string>
+    <string name="triage_nav_previous">Previous image</string>
+    <string name="triage_nav_next">Next image</string>
+    <string name="triage_jump_title">Jump to position</string>
+    <string name="triage_jump_position">Image %1$d of %2$d</string>
+    <string name="triage_jump_go">Go</string>
 
     <!-- Trash -->
     <string name="trash_title">Trash</string>

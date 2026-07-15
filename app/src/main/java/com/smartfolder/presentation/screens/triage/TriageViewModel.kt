@@ -3,6 +3,7 @@ package com.smartfolder.presentation.screens.triage
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.smartfolder.data.local.datastore.TriagePositionStore
 import com.smartfolder.domain.model.FolderRole
 import com.smartfolder.domain.usecase.ListSourceImagesUseCase
 import com.smartfolder.domain.usecase.MoveImagesUseCase
@@ -23,7 +24,8 @@ class TriageViewModel @Inject constructor(
     private val listSourceImagesUseCase: ListSourceImagesUseCase,
     private val moveImagesUseCase: MoveImagesUseCase,
     private val undoMoveUseCase: UndoMoveUseCase,
-    private val moveToTrashUseCase: MoveToTrashUseCase
+    private val moveToTrashUseCase: MoveToTrashUseCase,
+    private val positionStore: TriagePositionStore
 ) : ViewModel() {
 
     private sealed interface Decision {
@@ -54,11 +56,17 @@ class TriageViewModel @Inject constructor(
                 val destinations = folderRepository.getByRole(FolderRole.DESTINATION)
                     .sortedBy { it.id }
                 val queue = listSourceImagesUseCase(source)
+                val savedUri = runCatching { positionStore.getLastImageUri(folderId) }.getOrNull()
+                val startIndex = savedUri
+                    ?.let { saved -> queue.indexOfFirst { it.uri.toString() == saved } }
+                    ?.takeIf { it >= 0 }
+                    ?: 0
                 _uiState.value = TriageUiState(
                     isLoading = false,
                     sourceFolder = source,
                     destinations = destinations,
-                    queue = queue
+                    queue = queue,
+                    currentIndex = startIndex
                 )
             } catch (e: SecurityException) {
                 _uiState.value = _uiState.value.copy(
@@ -95,6 +103,7 @@ class TriageViewModel @Inject constructor(
                         (destinationId to (current.movedByDestination[destinationId] ?: 0) + 1),
                     canUndo = true
                 )
+                persistPosition()
             } else {
                 _uiState.value = _uiState.value.copy(
                     isBusy = false,
@@ -123,6 +132,7 @@ class TriageViewModel @Inject constructor(
                         deletedCount = current.deletedCount + 1,
                         canUndo = true
                     )
+                    persistPosition()
                 },
                 onFailure = { e ->
                     _uiState.value = _uiState.value.copy(
@@ -143,6 +153,7 @@ class TriageViewModel @Inject constructor(
             skippedCount = state.skippedCount + 1,
             canUndo = true
         )
+        persistPosition()
     }
 
     fun undoLast() {
@@ -157,6 +168,7 @@ class TriageViewModel @Inject constructor(
                     skippedCount = (state.skippedCount - 1).coerceAtLeast(0),
                     canUndo = decisions.isNotEmpty()
                 )
+                persistPosition()
             }
             is Decision.Deleted -> {
                 val sourceUri = state.sourceFolder?.uri ?: return
@@ -230,6 +242,43 @@ class TriageViewModel @Inject constructor(
                             error = report.errors.firstOrNull() ?: "Could not undo the move."
                         )
                     }
+                }
+            }
+        }
+    }
+
+    fun navigateNext() {
+        val state = _uiState.value
+        if (state.isBusy) return
+        if (state.currentIndex >= state.queue.lastIndex) return
+        _uiState.value = state.copy(currentIndex = state.currentIndex + 1)
+        persistPosition()
+    }
+
+    fun navigatePrevious() {
+        val state = _uiState.value
+        if (state.isBusy) return
+        if (state.currentIndex <= 0) return
+        _uiState.value = state.copy(currentIndex = state.currentIndex - 1)
+        persistPosition()
+    }
+
+    fun jumpTo(index: Int) {
+        val state = _uiState.value
+        if (state.isBusy || state.queue.isEmpty()) return
+        _uiState.value = state.copy(currentIndex = index.coerceIn(0, state.queue.lastIndex))
+        persistPosition()
+    }
+
+    private fun persistPosition() {
+        val state = _uiState.value
+        viewModelScope.launch {
+            runCatching {
+                val current = state.current
+                if (current != null) {
+                    positionStore.setLastImageUri(folderId, current.uri.toString())
+                } else {
+                    positionStore.clear(folderId)
                 }
             }
         }

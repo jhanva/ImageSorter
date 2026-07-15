@@ -1,6 +1,7 @@
 package com.smartfolder.presentation.screens.triage
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,7 +19,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -29,6 +33,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -41,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -68,6 +74,7 @@ fun TriageScreen(
     val haptics = LocalHapticFeedback.current
     val view = LocalView.current
     var previewImage by remember { mutableStateOf<ImageInfo?>(null) }
+    var showJumpDialog by remember { mutableStateOf(false) }
 
     // Keep the screen on during a triage session.
     androidx.compose.runtime.DisposableEffect(Unit) {
@@ -85,6 +92,44 @@ fun TriageScreen(
                 .build()
             coil.Coil.imageLoader(context).enqueue(request)
         }
+    }
+
+    if (showJumpDialog && uiState.totalCount > 0) {
+        var jumpTarget by remember { mutableStateOf(uiState.currentIndex.toFloat()) }
+        AlertDialog(
+            onDismissRequest = { showJumpDialog = false },
+            title = { Text(stringResource(R.string.triage_jump_title)) },
+            text = {
+                Column {
+                    Text(
+                        text = stringResource(
+                            R.string.triage_jump_position,
+                            jumpTarget.toInt() + 1,
+                            uiState.totalCount
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Slider(
+                        value = jumpTarget,
+                        onValueChange = { jumpTarget = it },
+                        valueRange = 0f..(uiState.totalCount - 1).coerceAtLeast(0).toFloat()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showJumpDialog = false
+                    viewModel.jumpTo(jumpTarget.toInt())
+                }) {
+                    Text(stringResource(R.string.triage_jump_go))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showJumpDialog = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            }
+        )
     }
 
     previewImage?.let { image ->
@@ -193,17 +238,68 @@ fun TriageScreen(
                                 .fillMaxWidth()
                                 .weight(1f)
                                 .clickable { previewImage = current }
+                                .pointerInput(uiState.currentIndex) {
+                                    var dragTotal = 0f
+                                    detectHorizontalDragGestures(
+                                        onDragStart = { dragTotal = 0f },
+                                        onDragEnd = {
+                                            when {
+                                                dragTotal > 120f -> viewModel.navigatePrevious()
+                                                dragTotal < -120f -> viewModel.navigateNext()
+                                            }
+                                        }
+                                    ) { _, dragAmount ->
+                                        dragTotal += dragAmount
+                                    }
+                                }
                         )
 
-                        Text(
-                            text = current.displayName,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Center
-                        )
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(
+                                onClick = { viewModel.navigatePrevious() },
+                                enabled = uiState.currentIndex > 0 && !uiState.isBusy
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.ChevronLeft,
+                                    contentDescription = stringResource(R.string.triage_nav_previous)
+                                )
+                            }
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { showJumpDialog = true },
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = current.displayName,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = stringResource(
+                                        R.string.triage_jump_position,
+                                        uiState.currentIndex + 1,
+                                        uiState.totalCount
+                                    ),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            IconButton(
+                                onClick = { viewModel.navigateNext() },
+                                enabled = uiState.currentIndex < uiState.queue.lastIndex && !uiState.isBusy
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.ChevronRight,
+                                    contentDescription = stringResource(R.string.triage_nav_next)
+                                )
+                            }
+                        }
 
                         DestinationButtons(
                             uiState = uiState,

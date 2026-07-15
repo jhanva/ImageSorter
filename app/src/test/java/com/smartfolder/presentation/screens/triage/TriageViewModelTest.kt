@@ -37,6 +37,7 @@ class TriageViewModelTest {
     private lateinit var moveImagesUseCase: MoveImagesUseCase
     private lateinit var undoMoveUseCase: UndoMoveUseCase
     private lateinit var moveToTrashUseCase: com.smartfolder.domain.usecase.MoveToTrashUseCase
+    private lateinit var positionStore: com.smartfolder.data.local.datastore.TriagePositionStore
 
     private val sourceFolder = Folder(
         id = 1L,
@@ -64,6 +65,7 @@ class TriageViewModelTest {
         moveImagesUseCase = mock(MoveImagesUseCase::class.java)
         undoMoveUseCase = mock(UndoMoveUseCase::class.java)
         moveToTrashUseCase = mock(com.smartfolder.domain.usecase.MoveToTrashUseCase::class.java)
+        positionStore = mock(com.smartfolder.data.local.datastore.TriagePositionStore::class.java)
     }
 
     private fun image(id: Long, name: String = "img$id.jpg") = ImageInfo(
@@ -89,7 +91,8 @@ class TriageViewModelTest {
         listSourceImagesUseCase = listSourceImagesUseCase,
         moveImagesUseCase = moveImagesUseCase,
         undoMoveUseCase = undoMoveUseCase,
-        moveToTrashUseCase = moveToTrashUseCase
+        moveToTrashUseCase = moveToTrashUseCase,
+        positionStore = positionStore
     )
 
     private suspend fun awaitState(
@@ -279,6 +282,75 @@ class TriageViewModelTest {
 
         assertEquals(1L, state.current?.id)
         assertEquals(0, state.deletedCount)
+    }
+
+
+    @Test
+    fun `navigation moves without recording decisions`() = runTest(mainDispatcherRule.dispatcher) {
+        setupHappyPath(listOf(image(1L), image(2L), image(3L)))
+
+        val vm = viewModel()
+        awaitState(vm) { !it.isLoading }
+
+        vm.navigateNext()
+        var state = awaitState(vm) { it.current?.id == 2L }
+        assertEquals(0, state.skippedCount)
+
+        vm.navigatePrevious()
+        state = awaitState(vm) { it.current?.id == 1L }
+        assertEquals(0, state.skippedCount)
+    }
+
+    @Test
+    fun `navigation is bounded by the queue`() = runTest(mainDispatcherRule.dispatcher) {
+        setupHappyPath(listOf(image(1L)))
+
+        val vm = viewModel()
+        awaitState(vm) { !it.isLoading }
+
+        vm.navigatePrevious()
+        assertEquals(1L, vm.uiState.value.current?.id)
+
+        vm.navigateNext()
+        val state = awaitState(vm) { true }
+        assertEquals(1L, state.current?.id)
+    }
+
+    @Test
+    fun `jumpTo moves to the requested position`() = runTest(mainDispatcherRule.dispatcher) {
+        setupHappyPath(listOf(image(1L), image(2L), image(3L), image(4L)))
+
+        val vm = viewModel()
+        awaitState(vm) { !it.isLoading }
+
+        vm.jumpTo(2)
+        val state = awaitState(vm) { it.current?.id == 3L }
+        assertEquals(3L, state.current?.id)
+    }
+
+    @Test
+    fun `resumes from the saved position`() = runTest(mainDispatcherRule.dispatcher) {
+        val images = listOf(image(1L), image(2L), image(3L))
+        setupHappyPath(images)
+        `when`(positionStore.getLastImageUri(sourceFolder.id))
+            .thenReturn(images[2].uri.toString())
+
+        val vm = viewModel()
+        val state = awaitState(vm) { !it.isLoading }
+
+        assertEquals(3L, state.current?.id)
+    }
+
+    @Test
+    fun `falls back to start when saved position no longer exists`() = runTest(mainDispatcherRule.dispatcher) {
+        setupHappyPath(listOf(image(1L), image(2L)))
+        `when`(positionStore.getLastImageUri(sourceFolder.id))
+            .thenReturn("content://img/gone")
+
+        val vm = viewModel()
+        val state = awaitState(vm) { !it.isLoading }
+
+        assertEquals(1L, state.current?.id)
     }
 
     @Test
