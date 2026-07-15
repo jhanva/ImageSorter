@@ -11,6 +11,7 @@ data class TriageUiState(
     val currentIndex: Int = 0,
     val movedCount: Int = 0,
     val skippedCount: Int = 0,
+    val deletedCount: Int = 0,
     val movedByDestination: Map<Long, Int> = emptyMap(),
     val canUndo: Boolean = false,
     val isBusy: Boolean = false,
@@ -22,7 +23,7 @@ data class TriageUiState(
 
     val totalCount: Int get() = queue.size
 
-    val decidedCount: Int get() = movedCount + skippedCount
+    val decidedCount: Int get() = movedCount + skippedCount + deletedCount
 
     val remainingCount: Int get() = (totalCount - currentIndex).coerceAtLeast(0)
 }

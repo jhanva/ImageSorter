@@ -11,6 +11,8 @@ import com.smartfolder.presentation.screens.home.HomeScreen
 import com.smartfolder.presentation.screens.home.HomeViewModel
 import com.smartfolder.presentation.screens.settings.SettingsScreen
 import com.smartfolder.presentation.screens.settings.SettingsViewModel
+import com.smartfolder.presentation.screens.trash.TrashScreen
+import com.smartfolder.presentation.screens.trash.TrashViewModel
 import com.smartfolder.presentation.screens.triage.TriageScreen
 import com.smartfolder.presentation.screens.triage.TriageViewModel
 
@@ -40,9 +42,26 @@ fun NavGraph(
         composable(
             route = Screen.Triage.route,
             arguments = listOf(navArgument("folderId") { type = NavType.LongType })
-        ) {
+        ) { backStackEntry ->
             val viewModel: TriageViewModel = hiltViewModel()
+            val folderId = backStackEntry.arguments?.getLong("folderId") ?: 0L
             TriageScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() },
+                onOpenTrash = {
+                    navController.navigate(Screen.Trash.createRoute(folderId)) {
+                        launchSingleTop = true
+                    }
+                }
+            )
+        }
+
+        composable(
+            route = Screen.Trash.route,
+            arguments = listOf(navArgument("folderId") { type = NavType.LongType })
+        ) {
+            val viewModel: TrashViewModel = hiltViewModel()
+            TrashScreen(
                 viewModel = viewModel,
                 onNavigateBack = { navController.popBackStack() }
             )

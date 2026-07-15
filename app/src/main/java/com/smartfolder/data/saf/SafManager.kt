@@ -127,7 +127,8 @@ class SafManager @Inject constructor(
                         val mimeType = cursor.getString(mimeCol)
 
                         if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
-                            if (recursive) queue.add(docId)
+                            // The staging trash must not feed back into the queue.
+                            if (recursive && name != SafFileOps.TRASH_FOLDER_NAME) queue.add(docId)
                             continue
                         }
 
@@ -172,6 +173,54 @@ class SafManager @Inject constructor(
         if (dotIndex == -1 || dotIndex == displayName.length - 1) return false
         val ext = displayName.substring(dotIndex + 1).lowercase()
         return ext in imageExtensions
+    }
+
+    /**
+     * Lists the images directly inside one child folder (non recursive),
+     * with a single children query.
+     */
+    fun listImageFilesInFolder(treeUri: Uri, folderDocumentUri: Uri): List<SafImageFile> {
+        val docId = runCatching { DocumentsContract.getDocumentId(folderDocumentUri) }.getOrNull()
+            ?: return emptyList()
+        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, docId)
+        val projection = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+            DocumentsContract.Document.COLUMN_SIZE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED
+        )
+
+        val results = mutableListOf<SafImageFile>()
+        try {
+            context.contentResolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
+                val idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                val nameCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                val mimeCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
+                val sizeCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_SIZE)
+                val modifiedCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
+
+                while (cursor.moveToNext()) {
+                    val name = cursor.getString(nameCol) ?: continue
+                    val mimeType = cursor.getString(mimeCol)
+                    if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) continue
+                    if (!isImageCandidate(name, mimeType)) continue
+
+                    results.add(
+                        SafImageFile(
+                            uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, cursor.getString(idCol)),
+                            displayName = name,
+                            sizeBytes = cursor.getLong(sizeCol),
+                            lastModified = cursor.getLong(modifiedCol),
+                            mimeType = mimeType ?: ""
+                        )
+                    )
+                }
+            }
+        } catch (_: Exception) {
+            return emptyList()
+        }
+        return results
     }
 
     fun getFolderDisplayName(treeUri: Uri): String {

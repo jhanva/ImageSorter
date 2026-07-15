@@ -36,6 +36,7 @@ class TriageViewModelTest {
     private lateinit var listSourceImagesUseCase: ListSourceImagesUseCase
     private lateinit var moveImagesUseCase: MoveImagesUseCase
     private lateinit var undoMoveUseCase: UndoMoveUseCase
+    private lateinit var moveToTrashUseCase: com.smartfolder.domain.usecase.MoveToTrashUseCase
 
     private val sourceFolder = Folder(
         id = 1L,
@@ -62,6 +63,7 @@ class TriageViewModelTest {
         listSourceImagesUseCase = mock(ListSourceImagesUseCase::class.java)
         moveImagesUseCase = mock(MoveImagesUseCase::class.java)
         undoMoveUseCase = mock(UndoMoveUseCase::class.java)
+        moveToTrashUseCase = mock(com.smartfolder.domain.usecase.MoveToTrashUseCase::class.java)
     }
 
     private fun image(id: Long, name: String = "img$id.jpg") = ImageInfo(
@@ -86,7 +88,8 @@ class TriageViewModelTest {
         folderRepository = folderRepository,
         listSourceImagesUseCase = listSourceImagesUseCase,
         moveImagesUseCase = moveImagesUseCase,
-        undoMoveUseCase = undoMoveUseCase
+        undoMoveUseCase = undoMoveUseCase,
+        moveToTrashUseCase = moveToTrashUseCase
     )
 
     private suspend fun awaitState(
@@ -218,6 +221,64 @@ class TriageViewModelTest {
 
         assertEquals(1L, state.current?.id)
         assertEquals(0, state.movedCount)
+    }
+
+    @Test
+    fun `deleteCurrent moves image to trash and advances`() = runTest(mainDispatcherRule.dispatcher) {
+        val first = image(1L)
+        val second = image(2L)
+        setupHappyPath(listOf(first, second))
+        val trashUri = TestUri("content://trash/img1")
+        `when`(moveToTrashUseCase.invoke(first, sourceFolder.uri))
+            .thenReturn(Result.success(MoveImagesUseCase.MovedEntry(first, trashUri)))
+
+        val vm = viewModel()
+        awaitState(vm) { !it.isLoading }
+
+        vm.deleteCurrent()
+        val state = awaitState(vm) { it.deletedCount == 1 }
+
+        assertEquals(2L, state.current?.id)
+        assertEquals(0, state.movedCount)
+        assertTrue(state.canUndo)
+    }
+
+    @Test
+    fun `undo after delete restores image and steps back`() = runTest(mainDispatcherRule.dispatcher) {
+        val first = image(1L)
+        setupHappyPath(listOf(first, image(2L)))
+        val trashUri = TestUri("content://trash/img1")
+        `when`(moveToTrashUseCase.invoke(first, sourceFolder.uri))
+            .thenReturn(Result.success(MoveImagesUseCase.MovedEntry(first, trashUri)))
+        `when`(undoMoveUseCase.invoke(anyList()))
+            .thenReturn(UndoMoveUseCase.UndoReport(restored = 1, failed = 0, errors = emptyList()))
+
+        val vm = viewModel()
+        awaitState(vm) { !it.isLoading }
+        vm.deleteCurrent()
+        awaitState(vm) { it.deletedCount == 1 }
+
+        vm.undoLast()
+        val state = awaitState(vm) { it.deletedCount == 0 }
+
+        assertEquals(1L, state.current?.id)
+    }
+
+    @Test
+    fun `failed trash move keeps current image and reports error`() = runTest(mainDispatcherRule.dispatcher) {
+        val first = image(1L)
+        setupHappyPath(listOf(first))
+        `when`(moveToTrashUseCase.invoke(first, sourceFolder.uri))
+            .thenReturn(Result.failure(IllegalStateException("no trash folder")))
+
+        val vm = viewModel()
+        awaitState(vm) { !it.isLoading }
+
+        vm.deleteCurrent()
+        val state = awaitState(vm) { it.error != null }
+
+        assertEquals(1L, state.current?.id)
+        assertEquals(0, state.deletedCount)
     }
 
     @Test

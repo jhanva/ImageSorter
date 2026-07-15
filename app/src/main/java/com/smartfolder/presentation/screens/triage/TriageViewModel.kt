@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.smartfolder.domain.model.FolderRole
 import com.smartfolder.domain.usecase.ListSourceImagesUseCase
 import com.smartfolder.domain.usecase.MoveImagesUseCase
+import com.smartfolder.domain.usecase.MoveToTrashUseCase
 import com.smartfolder.domain.usecase.UndoMoveUseCase
 import com.smartfolder.domain.repository.FolderRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,13 +22,18 @@ class TriageViewModel @Inject constructor(
     private val folderRepository: FolderRepository,
     private val listSourceImagesUseCase: ListSourceImagesUseCase,
     private val moveImagesUseCase: MoveImagesUseCase,
-    private val undoMoveUseCase: UndoMoveUseCase
+    private val undoMoveUseCase: UndoMoveUseCase,
+    private val moveToTrashUseCase: MoveToTrashUseCase
 ) : ViewModel() {
 
     private sealed interface Decision {
         data class Moved(
             val entry: MoveImagesUseCase.MovedEntry,
             val destinationId: Long
+        ) : Decision
+
+        data class Deleted(
+            val entry: MoveImagesUseCase.MovedEntry
         ) : Decision
 
         data object Skipped : Decision
@@ -98,6 +104,36 @@ class TriageViewModel @Inject constructor(
         }
     }
 
+    fun deleteCurrent() {
+        val state = _uiState.value
+        if (state.isBusy) return
+        val image = state.current ?: return
+        val sourceUri = state.sourceFolder?.uri ?: return
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isBusy = true, error = null)
+            val result = moveToTrashUseCase(image, sourceUri)
+            result.fold(
+                onSuccess = { entry ->
+                    decisions.addLast(Decision.Deleted(entry))
+                    val current = _uiState.value
+                    _uiState.value = current.copy(
+                        isBusy = false,
+                        currentIndex = current.currentIndex + 1,
+                        deletedCount = current.deletedCount + 1,
+                        canUndo = true
+                    )
+                },
+                onFailure = { e ->
+                    _uiState.value = _uiState.value.copy(
+                        isBusy = false,
+                        error = e.message ?: "Could not delete ${image.displayName}"
+                    )
+                }
+            )
+        }
+    }
+
     fun skip() {
         val state = _uiState.value
         if (state.isBusy || state.current == null) return
@@ -121,6 +157,40 @@ class TriageViewModel @Inject constructor(
                     skippedCount = (state.skippedCount - 1).coerceAtLeast(0),
                     canUndo = decisions.isNotEmpty()
                 )
+            }
+            is Decision.Deleted -> {
+                val sourceUri = state.sourceFolder?.uri ?: return
+                viewModelScope.launch {
+                    _uiState.value = _uiState.value.copy(isBusy = true, error = null)
+                    val report = undoMoveUseCase(
+                        listOf(UndoMoveUseCase.UndoEntry(last.entry, sourceUri))
+                    )
+                    val current = _uiState.value
+                    if (report.restored > 0) {
+                        val restoredUri = report.restoredUris[last.entry.image.id]
+                        val restoredQueue = if (restoredUri != null) {
+                            current.queue.map { item ->
+                                if (item.id == last.entry.image.id) item.copy(uri = restoredUri) else item
+                            }
+                        } else {
+                            current.queue
+                        }
+                        _uiState.value = current.copy(
+                            isBusy = false,
+                            queue = restoredQueue,
+                            currentIndex = (current.currentIndex - 1).coerceAtLeast(0),
+                            deletedCount = (current.deletedCount - 1).coerceAtLeast(0),
+                            canUndo = decisions.isNotEmpty(),
+                            error = report.errors.firstOrNull()
+                        )
+                    } else {
+                        decisions.addLast(last)
+                        _uiState.value = current.copy(
+                            isBusy = false,
+                            error = report.errors.firstOrNull() ?: "Could not undo the delete."
+                        )
+                    }
+                }
             }
             is Decision.Moved -> {
                 val sourceUri = state.sourceFolder?.uri ?: return

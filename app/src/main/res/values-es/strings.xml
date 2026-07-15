@@ -41,6 +41,20 @@
     <string name="triage_title">Clasificar imagenes</string>
     <string name="triage_progress">%1$d restantes - %2$d movidas</string>
     <string name="triage_skip">Omitir</string>
+    <string name="triage_delete">Eliminar</string>
+
+    <!-- Papelera -->
+    <string name="trash_title">Papelera</string>
+    <string name="trash_subtitle">%1$d imagenes</string>
+    <string name="trash_restore">Restaurar</string>
+    <string name="trash_delete_forever">Eliminar definitivamente</string>
+    <string name="trash_empty_all">Vaciar papelera</string>
+    <string name="trash_empty_confirm_title">Vaciar la papelera?</string>
+    <string name="trash_empty_confirm_message">%1$d imagenes se eliminaran definitivamente. Esto no se puede deshacer.</string>
+    <string name="trash_empty_confirm_action">Eliminar todo</string>
+    <string name="trash_empty_title">La papelera esta vacia</string>
+    <string name="trash_empty_message">Las imagenes que elimines al clasificar quedan guardadas aqui.</string>
+    <string name="triage_deleted_summary">%1$d enviadas a la carpeta ImageSorterTrash dentro del origen. Vaciala desde tu explorador de archivos cuando estes seguro.</string>
     <string name="triage_undo">Deshacer ultima accion</string>
     <string name="triage_complete_title">Carpeta clasificada</string>
     <string name="triage_complete_message">%1$d movidas, %2$d omitidas.</string>

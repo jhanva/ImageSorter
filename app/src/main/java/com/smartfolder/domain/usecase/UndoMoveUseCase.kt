@@ -3,6 +3,8 @@ package com.smartfolder.domain.usecase
 import android.net.Uri
 import com.smartfolder.data.saf.MoveResult
 import com.smartfolder.data.saf.SafFileOps
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import javax.inject.Inject
 
@@ -24,7 +26,7 @@ class UndoMoveUseCase @Inject constructor(
         val restoredUris: Map<Long, Uri> = emptyMap()
     )
 
-    suspend operator fun invoke(entries: List<UndoEntry>): UndoReport {
+    suspend operator fun invoke(entries: List<UndoEntry>): UndoReport = withContext(Dispatchers.IO) {
         var restored = 0
         var failed = 0
         val errors = mutableListOf<String>()
@@ -54,7 +56,7 @@ class UndoMoveUseCase @Inject constructor(
             }
         }
 
-        return UndoReport(
+        UndoReport(
             restored = restored,
             failed = failed,
             errors = errors,

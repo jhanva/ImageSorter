@@ -7,6 +7,8 @@ import com.smartfolder.data.saf.SafManager
 import com.smartfolder.domain.model.Folder
 import com.smartfolder.domain.model.FolderRole
 import com.smartfolder.domain.repository.FolderRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 class SelectFolderUseCase @Inject constructor(
@@ -14,7 +16,7 @@ class SelectFolderUseCase @Inject constructor(
     private val safManager: SafManager,
     private val mediaStoreFolderProvider: MediaStoreFolderProvider
 ) {
-    suspend operator fun invoke(uri: Uri, role: FolderRole): Folder {
+    suspend operator fun invoke(uri: Uri, role: FolderRole): Folder = withContext(Dispatchers.IO) {
         safManager.takePersistablePermission(uri)
         val displayName = safManager.getFolderDisplayName(uri)
         val documentId = runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull()
@@ -34,7 +36,7 @@ class SelectFolderUseCase @Inject constructor(
                 imageCount = imageCount
             )
             folderRepository.update(updated)
-            return updated
+            return@withContext updated
         }
 
         val folder = Folder(
@@ -44,6 +46,6 @@ class SelectFolderUseCase @Inject constructor(
             imageCount = imageCount
         )
         val id = folderRepository.insert(folder)
-        return folder.copy(id = id)
+        folder.copy(id = id)
     }
 }

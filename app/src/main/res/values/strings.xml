@@ -41,6 +41,20 @@
     <string name="triage_title">Sort images</string>
     <string name="triage_progress">%1$d left - %2$d moved</string>
     <string name="triage_skip">Skip</string>
+    <string name="triage_delete">Delete</string>
+
+    <!-- Trash -->
+    <string name="trash_title">Trash</string>
+    <string name="trash_subtitle">%1$d images</string>
+    <string name="trash_restore">Restore</string>
+    <string name="trash_delete_forever">Delete forever</string>
+    <string name="trash_empty_all">Empty trash</string>
+    <string name="trash_empty_confirm_title">Empty trash?</string>
+    <string name="trash_empty_confirm_message">%1$d images will be deleted permanently. This cannot be undone.</string>
+    <string name="trash_empty_confirm_action">Delete all</string>
+    <string name="trash_empty_title">Trash is empty</string>
+    <string name="trash_empty_message">Images you delete while sorting are staged here.</string>
+    <string name="triage_deleted_summary">%1$d sent to the ImageSorterTrash folder inside the source. Empty it from your file manager when you are sure.</string>
     <string name="triage_undo">Undo last action</string>
     <string name="triage_complete_title">Folder sorted</string>
     <string name="triage_complete_message">%1$d moved, %2$d skipped.</string>

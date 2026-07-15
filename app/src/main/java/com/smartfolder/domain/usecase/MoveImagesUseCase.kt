@@ -4,6 +4,8 @@ import android.net.Uri
 import com.smartfolder.data.saf.MoveResult
 import com.smartfolder.data.saf.SafFileOps
 import com.smartfolder.domain.model.ImageInfo
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import javax.inject.Inject
 
@@ -27,7 +29,7 @@ class MoveImagesUseCase @Inject constructor(
     suspend operator fun invoke(
         images: List<ImageInfo>,
         destinationFolderUri: Uri
-    ): MoveReport {
+    ): MoveReport = withContext(Dispatchers.IO) {
         var moved = 0
         var copiedOnly = 0
         var failed = 0
@@ -61,7 +63,7 @@ class MoveImagesUseCase @Inject constructor(
             }
         }
 
-        return MoveReport(
+        MoveReport(
             moved = moved,
             copiedOnly = copiedOnly,
             failed = failed,

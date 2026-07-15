@@ -17,6 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -59,7 +60,8 @@ import com.smartfolder.presentation.components.ImagePreviewDialog
 @Composable
 fun TriageScreen(
     viewModel: TriageViewModel,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onOpenTrash: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val haptics = LocalHapticFeedback.current
@@ -123,6 +125,12 @@ fun TriageScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onOpenTrash) {
+                        Icon(
+                            imageVector = Icons.Filled.Delete,
+                            contentDescription = stringResource(R.string.trash_title)
+                        )
+                    }
                     IconButton(
                         onClick = { viewModel.undoLast() },
                         enabled = uiState.canUndo && !uiState.isBusy
@@ -202,7 +210,11 @@ fun TriageScreen(
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                 viewModel.moveTo(destinationId)
                             },
-                            onSkip = { viewModel.skip() }
+                            onSkip = { viewModel.skip() },
+                            onDelete = {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                viewModel.deleteCurrent()
+                            }
                         )
                     }
                 }
@@ -215,7 +227,8 @@ fun TriageScreen(
 private fun DestinationButtons(
     uiState: TriageUiState,
     onMove: (Long) -> Unit,
-    onSkip: () -> Unit
+    onSkip: () -> Unit,
+    onDelete: () -> Unit
 ) {
     Column(
         modifier = Modifier.padding(bottom = 12.dp),
@@ -242,14 +255,34 @@ private fun DestinationButtons(
                 }
             }
         }
-        OutlinedButton(
-            onClick = onSkip,
-            enabled = !uiState.isBusy,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)
-        ) {
-            Text(stringResource(R.string.triage_skip))
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            OutlinedButton(
+                onClick = onSkip,
+                enabled = !uiState.isBusy,
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.triage_skip),
+                    maxLines = 1
+                )
+            }
+            OutlinedButton(
+                onClick = onDelete,
+                enabled = !uiState.isBusy,
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error
+                ),
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.triage_delete),
+                    maxLines = 1
+                )
+            }
         }
     }
 }
@@ -284,6 +317,14 @@ private fun TriageSummary(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
         )
+        if (uiState.deletedCount > 0) {
+            Text(
+                text = stringResource(R.string.triage_deleted_summary, uiState.deletedCount),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+                textAlign = TextAlign.Center
+            )
+        }
 
         uiState.movedByDestination.forEach { (destinationId, count) ->
             val name = foldersById[destinationId]?.displayName ?: return@forEach

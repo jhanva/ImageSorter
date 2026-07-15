@@ -15,6 +15,166 @@ import javax.inject.Singleton
 class SafFileOps @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    companion object {
+        const val TRASH_FOLDER_NAME = "ImageSorterTrash"
+    }
+
+    /**
+     * Moves a file into a direct child folder of the given tree (creating the
+     * folder if needed). Used for the staging trash inside the source folder.
+     */
+    private val childFolderCache = mutableMapOf<Pair<Uri, String>, Uri>()
+
+    fun moveFileToChildFolder(
+        sourceUri: Uri,
+        treeUri: Uri,
+        childFolderName: String,
+        displayName: String
+    ): MoveResult {
+        // Resolving the child folder scans the whole parent; cache it so only
+        // the first delete of a session pays that cost.
+        val cacheKey = treeUri to childFolderName
+        val childUri = childFolderCache[cacheKey]
+            ?: findOrCreateChildFolder(treeUri, childFolderName)?.also {
+                childFolderCache[cacheKey] = it
+            }
+            ?: return MoveResult.Failure("Cannot create folder $childFolderName")
+
+        // Fast path: same-provider move.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N &&
+            sourceUri.authority == childUri.authority
+        ) {
+            try {
+                val sourceDocId = DocumentsContract.getDocumentId(sourceUri)
+                val sourceParentDocId = sourceDocId
+                    .substringBeforeLast('/', missingDelimiterValue = "")
+                    .ifBlank { DocumentsContract.getTreeDocumentId(sourceUri) }
+                val sourceParentUri =
+                    DocumentsContract.buildDocumentUriUsingTree(sourceUri, sourceParentDocId)
+                val movedUri = DocumentsContract.moveDocument(
+                    context.contentResolver,
+                    sourceUri,
+                    sourceParentUri,
+                    childUri
+                )
+                if (movedUri != null) return MoveResult.Moved(movedUri)
+            } catch (_: Exception) {
+                // Fall through to copy + delete.
+            }
+        }
+
+        return copyThenDeleteIntoUri(sourceUri, childUri, displayName)
+    }
+
+    fun deleteDocument(uri: Uri): Boolean {
+        return try {
+            DocumentsContract.deleteDocument(context.contentResolver, uri)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun findChildFolder(treeUri: Uri, childFolderName: String): Uri? {
+        val cacheKey = treeUri to childFolderName
+        childFolderCache[cacheKey]?.let { return it }
+        return findChildFolderUncached(treeUri, childFolderName)?.also {
+            childFolderCache[cacheKey] = it
+        }
+    }
+
+    /**
+     * Resolves a direct child folder with ONE children query instead of
+     * DocumentFile.findFile, which issues a query per child and freezes the
+     * UI on folders with thousands of files.
+     */
+    private fun findOrCreateChildFolder(treeUri: Uri, childFolderName: String): Uri? {
+        findChildFolderUncached(treeUri, childFolderName)?.let { return it }
+
+        return try {
+            val rootDocId = DocumentsContract.getTreeDocumentId(treeUri)
+            val rootUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, rootDocId)
+            DocumentsContract.createDocument(
+                context.contentResolver,
+                rootUri,
+                DocumentsContract.Document.MIME_TYPE_DIR,
+                childFolderName
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun findChildFolderUncached(treeUri: Uri, childFolderName: String): Uri? {
+        val rootDocId = runCatching { DocumentsContract.getTreeDocumentId(treeUri) }.getOrNull()
+            ?: return null
+        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, rootDocId)
+        val projection = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE
+        )
+
+        try {
+            context.contentResolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
+                val idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                val nameCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                val mimeCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
+                while (cursor.moveToNext()) {
+                    if (cursor.getString(mimeCol) == DocumentsContract.Document.MIME_TYPE_DIR &&
+                        cursor.getString(nameCol) == childFolderName
+                    ) {
+                        return DocumentsContract.buildDocumentUriUsingTree(
+                            treeUri,
+                            cursor.getString(idCol)
+                        )
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            return null
+        }
+        return null
+    }
+
+    private fun copyThenDeleteIntoUri(
+        sourceUri: Uri,
+        destFolderUri: Uri,
+        displayName: String
+    ): MoveResult {
+        val destFile = try {
+            DocumentsContract.createDocument(
+                context.contentResolver,
+                destFolderUri,
+                resolveMimeType(sourceUri, displayName),
+                displayName
+            )
+        } catch (_: Exception) {
+            null
+        } ?: return MoveResult.Failure("Cannot create file in destination folder")
+
+        return try {
+            context.contentResolver.openInputStream(sourceUri)?.use { input ->
+                context.contentResolver.openOutputStream(destFile)?.use { output ->
+                    input.copyTo(output)
+                }
+            } ?: return MoveResult.Failure("Cannot read source file")
+
+            val sourceDoc = DocumentFile.fromSingleUri(context, sourceUri)
+            if (sourceDoc?.delete() == true) {
+                MoveResult.Moved(destFile)
+            } else {
+                MoveResult.CopiedOnly(destFile, "Could not delete original file")
+            }
+        } catch (e: Exception) {
+            try {
+                DocumentsContract.deleteDocument(context.contentResolver, destFile)
+            } catch (ignored: Exception) {
+                // Best effort cleanup
+            }
+            MoveResult.Failure(e.message ?: "Unknown error during file move")
+        }
+    }
+
     fun moveFile(sourceUri: Uri, destinationFolderUri: Uri, displayName: String): MoveResult {
         // Primary path for modern Android/shared storage.
         tryMoveWithMediaStore(sourceUri, destinationFolderUri)?.let { return it }

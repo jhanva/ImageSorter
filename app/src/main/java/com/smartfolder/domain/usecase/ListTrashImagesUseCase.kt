@@ -1,5 +1,6 @@
 package com.smartfolder.domain.usecase
 
+import com.smartfolder.data.saf.SafFileOps
 import com.smartfolder.data.saf.SafManager
 import com.smartfolder.domain.model.Folder
 import com.smartfolder.domain.model.ImageInfo
@@ -7,21 +8,19 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
-/**
- * Lists images through SAF so every uri is a document under the granted tree:
- * moves then work silently, without per-file write-permission dialogs.
- */
-class ListSourceImagesUseCase @Inject constructor(
+class ListTrashImagesUseCase @Inject constructor(
+    private val safFileOps: SafFileOps,
     private val safManager: SafManager
 ) {
-    suspend operator fun invoke(folder: Folder): List<ImageInfo> = withContext(Dispatchers.IO) {
-        val files = safManager.listImageFiles(folder.uri, recursive = true)
-        files
+    suspend operator fun invoke(sourceFolder: Folder): List<ImageInfo> = withContext(Dispatchers.IO) {
+        val trashUri = safFileOps.findChildFolder(sourceFolder.uri, SafFileOps.TRASH_FOLDER_NAME)
+            ?: return@withContext emptyList()
+        safManager.listImageFilesInFolder(sourceFolder.uri, trashUri)
             .sortedByDescending { it.lastModified }
             .mapIndexed { index, file ->
                 ImageInfo(
                     id = index.toLong() + 1,
-                    folderId = folder.id,
+                    folderId = sourceFolder.id,
                     uri = file.uri,
                     displayName = file.displayName,
                     contentHash = "",
