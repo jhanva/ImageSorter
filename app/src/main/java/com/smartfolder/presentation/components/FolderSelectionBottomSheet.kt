@@ -17,8 +17,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -28,8 +30,13 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -43,8 +50,11 @@ fun FolderSelectionBottomSheet(
     folders: List<ImageFolderOption>,
     isLoading: Boolean,
     onDismiss: () -> Unit,
-    onSelect: (ImageFolderOption) -> Unit
+    onSelect: (ImageFolderOption) -> Unit,
+    onSelectMultiple: (List<ImageFolderOption>) -> Unit
 ) {
+    var selectedIds by remember { mutableStateOf(emptySet<String>()) }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState
@@ -97,10 +107,24 @@ fun FolderSelectionBottomSheet(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         items(folders.sortedByDescending { it.imageCount }) { folder ->
+                            val isSelected = folder.documentId in selectedIds
+                            fun toggleSelection() {
+                                selectedIds = if (isSelected) {
+                                    selectedIds - folder.documentId
+                                } else {
+                                    selectedIds + folder.documentId
+                                }
+                            }
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { onSelect(folder) },
+                                    .clickable {
+                                        if (selectedIds.isEmpty()) {
+                                            onSelect(folder)
+                                        } else {
+                                            toggleSelection()
+                                        }
+                                    },
                                 shape = RoundedCornerShape(20.dp),
                                 colors = CardDefaults.cardColors(
                                     containerColor = MaterialTheme.colorScheme.surface
@@ -138,11 +162,17 @@ fun FolderSelectionBottomSheet(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
-                                    Text(
-                                        text = stringResource(R.string.sheet_use),
-                                        style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.primary
+                                    if (selectedIds.isEmpty()) {
+                                        Text(
+                                            text = stringResource(R.string.sheet_use),
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    Checkbox(
+                                        checked = isSelected,
+                                        onCheckedChange = { toggleSelection() }
                                     )
                                 }
                             }
@@ -152,6 +182,27 @@ fun FolderSelectionBottomSheet(
             }
 
             Spacer(modifier = Modifier.height(12.dp))
+
+            if (selectedIds.isNotEmpty()) {
+                Button(
+                    onClick = {
+                        val selected = folders.filter { it.documentId in selectedIds }
+                        if (selected.isNotEmpty()) {
+                            onSelectMultiple(selected)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        pluralStringResource(
+                            R.plurals.sheet_add_selected,
+                            selectedIds.size,
+                            selectedIds.size
+                        )
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
 
             OutlinedButton(
                 onClick = onDismiss,

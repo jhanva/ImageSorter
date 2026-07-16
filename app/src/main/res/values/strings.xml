@@ -36,6 +36,10 @@
     <string name="sheet_empty_title">No image folders found</string>
     <string name="sheet_empty_message">Grant image access and try again.</string>
     <string name="sheet_use">Use</string>
+    <plurals name="sheet_add_selected">
+        <item quantity="one">Add %1$d folder</item>
+        <item quantity="other">Add %1$d folders</item>
+    </plurals>
 
     <!-- Triage -->
     <string name="triage_title">Sort images</string>

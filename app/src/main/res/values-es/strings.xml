@@ -36,6 +36,10 @@
     <string name="sheet_empty_title">No se encontraron carpetas</string>
     <string name="sheet_empty_message">Concede acceso a las imagenes e intenta de nuevo.</string>
     <string name="sheet_use">Usar</string>
+    <plurals name="sheet_add_selected">
+        <item quantity="one">Agregar %1$d carpeta</item>
+        <item quantity="other">Agregar %1$d carpetas</item>
+    </plurals>
 
     <!-- Triage -->
     <string name="triage_title">Clasificar imagenes</string>

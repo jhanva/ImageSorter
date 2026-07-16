@@ -185,6 +185,71 @@ class TriageViewModelTest {
 
         assertEquals(1L, state.current?.id)
         assertEquals(emptyMap<Long, Int>(), state.movedByDestination)
+        assertNull(state.error)
+        assertNull(state.warning)
+    }
+
+    @Test
+    fun `undo restored as copy reports warning instead of error`() = runTest(mainDispatcherRule.dispatcher) {
+        val first = image(1L)
+        setupHappyPath(listOf(first, image(2L)))
+        val newUri = TestUri("content://destA/img1")
+        `when`(moveImagesUseCase.invoke(listOf(first), destinationA.uri))
+            .thenReturn(moveReport(first, newUri))
+        `when`(undoMoveUseCase.invoke(anyList()))
+            .thenReturn(
+                UndoMoveUseCase.UndoReport(
+                    restored = 1,
+                    failed = 0,
+                    errors = listOf("img1.jpg: restored as copy (Could not delete original file)"),
+                    restoredUris = mapOf(first.id to TestUri("content://source/img1-copy"))
+                )
+            )
+
+        val vm = viewModel()
+        awaitState(vm) { !it.isLoading }
+        vm.moveTo(destinationA.id)
+        awaitState(vm) { it.movedCount == 1 }
+
+        vm.undoLast()
+        val state = awaitState(vm) { it.movedCount == 0 }
+
+        assertEquals(1L, state.current?.id)
+        assertNull(state.error)
+        assertEquals(
+            "img1.jpg: restored as copy (Could not delete original file)",
+            state.warning
+        )
+    }
+
+    @Test
+    fun `failed undo keeps decision and reports error`() = runTest(mainDispatcherRule.dispatcher) {
+        val first = image(1L)
+        setupHappyPath(listOf(first, image(2L)))
+        val newUri = TestUri("content://destA/img1")
+        `when`(moveImagesUseCase.invoke(listOf(first), destinationA.uri))
+            .thenReturn(moveReport(first, newUri))
+        `when`(undoMoveUseCase.invoke(anyList()))
+            .thenReturn(
+                UndoMoveUseCase.UndoReport(
+                    restored = 0,
+                    failed = 1,
+                    errors = listOf("img1.jpg: write denied")
+                )
+            )
+
+        val vm = viewModel()
+        awaitState(vm) { !it.isLoading }
+        vm.moveTo(destinationA.id)
+        awaitState(vm) { it.movedCount == 1 }
+
+        vm.undoLast()
+        val state = awaitState(vm) { it.error != null }
+
+        assertEquals("img1.jpg: write denied", state.error)
+        assertNull(state.warning)
+        assertEquals(1, state.movedCount)
+        assertTrue(state.canUndo)
     }
 
     @Test

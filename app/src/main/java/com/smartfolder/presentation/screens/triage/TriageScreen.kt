@@ -62,6 +62,7 @@ import com.smartfolder.domain.model.ImageInfo
 import com.smartfolder.presentation.components.EmptyState
 import com.smartfolder.presentation.components.ErrorBanner
 import com.smartfolder.presentation.components.ImagePreviewDialog
+import com.smartfolder.presentation.components.WarningBanner
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -199,6 +200,10 @@ fun TriageScreen(
         ) {
             uiState.error?.let { error ->
                 ErrorBanner(message = error)
+            }
+
+            uiState.warning?.let { warning ->
+                WarningBanner(message = warning)
             }
 
             when {

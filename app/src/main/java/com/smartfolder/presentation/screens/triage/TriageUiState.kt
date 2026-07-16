@@ -15,7 +15,8 @@ data class TriageUiState(
     val movedByDestination: Map<Long, Int> = emptyMap(),
     val canUndo: Boolean = false,
     val isBusy: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val warning: String? = null
 ) {
     val current: ImageInfo? get() = queue.getOrNull(currentIndex)
 

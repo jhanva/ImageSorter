@@ -41,6 +41,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -75,6 +76,12 @@ fun HomeScreen(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val hero = HomeVisuals.buildHeroContent(uiState)
 
+    // Batch selection queues the remaining document ids; the system dialog is
+    // re-launched for each one in turn because persistable permission is only
+    // granted per confirmed tree. Cancelling one dialog aborts the rest.
+    var pendingBatchIds by remember { mutableStateOf<List<String>>(emptyList()) }
+    var nextPickerDocumentId by remember { mutableStateOf<String?>(null) }
+
     // The image-folder sheet is only a browsing aid: the actual grant comes
     // from the system OpenDocumentTree dialog, pre-positioned at the chosen
     // folder so the user just confirms it. Constructed tree uris cannot get
@@ -83,13 +90,30 @@ fun HomeScreen(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         val role = pendingRole
-        pendingRole = null
         if (uri != null && role != null) {
             when (role) {
                 FolderSelectRole.DESTINATION -> viewModel.addDestinationFolder(uri)
                 FolderSelectRole.SOURCE -> viewModel.addSourceFolder(uri)
             }
         }
+        if (uri != null && role != null && pendingBatchIds.isNotEmpty()) {
+            nextPickerDocumentId = pendingBatchIds.first()
+            pendingBatchIds = pendingBatchIds.drop(1)
+        } else {
+            pendingBatchIds = emptyList()
+            pendingRole = null
+        }
+    }
+
+    LaunchedEffect(nextPickerDocumentId) {
+        val documentId = nextPickerDocumentId ?: return@LaunchedEffect
+        nextPickerDocumentId = null
+        folderPickerLauncher.launch(
+            DocumentsContract.buildDocumentUri(
+                "com.android.externalstorage.documents",
+                documentId
+            )
+        )
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -153,6 +177,11 @@ fun HomeScreen(
                     selected.documentId
                 )
                 folderPickerLauncher.launch(initialUri)
+            },
+            onSelectMultiple = { selected ->
+                showFolderSheet = false
+                pendingBatchIds = selected.drop(1).map { it.documentId }
+                nextPickerDocumentId = selected.firstOrNull()?.documentId
             }
         )
     }

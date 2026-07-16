@@ -89,7 +89,7 @@ class TriageViewModel @Inject constructor(
         val destination = state.destinations.firstOrNull { it.id == destinationId } ?: return
 
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isBusy = true, error = null)
+            _uiState.value = _uiState.value.copy(isBusy = true, error = null, warning = null)
             val report = moveImagesUseCase(listOf(image), destination.uri)
             val entry = report.movedEntries.firstOrNull()
             if (entry != null) {
@@ -120,7 +120,7 @@ class TriageViewModel @Inject constructor(
         val sourceUri = state.sourceFolder?.uri ?: return
 
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isBusy = true, error = null)
+            _uiState.value = _uiState.value.copy(isBusy = true, error = null, warning = null)
             val result = moveToTrashUseCase(image, sourceUri)
             result.fold(
                 onSuccess = { entry ->
@@ -173,7 +173,7 @@ class TriageViewModel @Inject constructor(
             is Decision.Deleted -> {
                 val sourceUri = state.sourceFolder?.uri ?: return
                 viewModelScope.launch {
-                    _uiState.value = _uiState.value.copy(isBusy = true, error = null)
+                    _uiState.value = _uiState.value.copy(isBusy = true, error = null, warning = null)
                     val report = undoMoveUseCase(
                         listOf(UndoMoveUseCase.UndoEntry(last.entry, sourceUri))
                     )
@@ -187,13 +187,16 @@ class TriageViewModel @Inject constructor(
                         } else {
                             current.queue
                         }
+                        // The undo succeeded; any message here is informational
+                        // (e.g. restored as copy), not a failure.
                         _uiState.value = current.copy(
                             isBusy = false,
                             queue = restoredQueue,
                             currentIndex = (current.currentIndex - 1).coerceAtLeast(0),
                             deletedCount = (current.deletedCount - 1).coerceAtLeast(0),
                             canUndo = decisions.isNotEmpty(),
-                            error = report.errors.firstOrNull()
+                            error = null,
+                            warning = report.errors.firstOrNull()
                         )
                     } else {
                         decisions.addLast(last)
@@ -207,7 +210,7 @@ class TriageViewModel @Inject constructor(
             is Decision.Moved -> {
                 val sourceUri = state.sourceFolder?.uri ?: return
                 viewModelScope.launch {
-                    _uiState.value = _uiState.value.copy(isBusy = true, error = null)
+                    _uiState.value = _uiState.value.copy(isBusy = true, error = null, warning = null)
                     val report = undoMoveUseCase(
                         listOf(UndoMoveUseCase.UndoEntry(last.entry, sourceUri))
                     )
@@ -233,7 +236,8 @@ class TriageViewModel @Inject constructor(
                                 current.movedByDestination + (last.destinationId to previousCount - 1)
                             },
                             canUndo = decisions.isNotEmpty(),
-                            error = report.errors.firstOrNull()
+                            error = null,
+                            warning = report.errors.firstOrNull()
                         )
                     } else {
                         decisions.addLast(last)
