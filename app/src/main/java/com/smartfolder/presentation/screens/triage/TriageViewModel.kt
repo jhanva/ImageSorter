@@ -151,7 +151,8 @@ class TriageViewModel @Inject constructor(
         _uiState.value = state.copy(
             currentIndex = state.currentIndex + 1,
             skippedCount = state.skippedCount + 1,
-            canUndo = true
+            canUndo = true,
+            error = null
         )
         persistPosition()
     }
@@ -166,7 +167,8 @@ class TriageViewModel @Inject constructor(
                 _uiState.value = state.copy(
                     currentIndex = (state.currentIndex - 1).coerceAtLeast(0),
                     skippedCount = (state.skippedCount - 1).coerceAtLeast(0),
-                    canUndo = decisions.isNotEmpty()
+                    canUndo = decisions.isNotEmpty(),
+                    error = null
                 )
                 persistPosition()
             }
@@ -255,7 +257,7 @@ class TriageViewModel @Inject constructor(
         val state = _uiState.value
         if (state.isBusy) return
         if (state.currentIndex >= state.queue.lastIndex) return
-        _uiState.value = state.copy(currentIndex = state.currentIndex + 1)
+        _uiState.value = state.copy(currentIndex = state.currentIndex + 1, error = null)
         persistPosition()
     }
 
@@ -263,14 +265,17 @@ class TriageViewModel @Inject constructor(
         val state = _uiState.value
         if (state.isBusy) return
         if (state.currentIndex <= 0) return
-        _uiState.value = state.copy(currentIndex = state.currentIndex - 1)
+        _uiState.value = state.copy(currentIndex = state.currentIndex - 1, error = null)
         persistPosition()
     }
 
     fun jumpTo(index: Int) {
         val state = _uiState.value
         if (state.isBusy || state.queue.isEmpty()) return
-        _uiState.value = state.copy(currentIndex = index.coerceIn(0, state.queue.lastIndex))
+        _uiState.value = state.copy(
+            currentIndex = index.coerceIn(0, state.queue.lastIndex),
+            error = null
+        )
         persistPosition()
     }
 

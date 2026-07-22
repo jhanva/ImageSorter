@@ -57,7 +57,7 @@ class SafFileOps @Inject constructor(
                     sourceParentUri,
                     childUri
                 )
-                if (movedUri != null) return MoveResult.Moved(movedUri)
+                if (movedUri != null) return MoveResult.Moved(treeQualified(treeUri, movedUri))
             } catch (_: Exception) {
                 // Fall through to copy + delete.
             }
@@ -268,13 +268,30 @@ class SafFileOps @Inject constructor(
                 targetParentUri
             )
             if (movedUri != null) {
-                MoveResult.Moved(movedUri)
+                MoveResult.Moved(treeQualified(destinationFolderUri, movedUri))
             } else {
                 null
             }
         } catch (_: Exception) {
             null
         }
+    }
+
+    /**
+     * Re-qualifies a moved document URI against the granted tree it now lives
+     * under. DocumentsContract.moveDocument (and some providers) return a bare
+     * document URI (content://authority/document/...) that is NOT covered by
+     * the tree permission grant, so a later read or reverse move throws
+     * SecurityException. Building a tree-scoped URI keeps it accessible; if the
+     * URI cannot be re-qualified we fall back to the original.
+     */
+    private fun treeQualified(treeUri: Uri, movedUri: Uri): Uri {
+        return runCatching {
+            DocumentsContract.buildDocumentUriUsingTree(
+                treeUri,
+                DocumentsContract.getDocumentId(movedUri)
+            )
+        }.getOrDefault(movedUri)
     }
 
     private fun resolveMimeType(sourceUri: Uri, displayName: String): String {
