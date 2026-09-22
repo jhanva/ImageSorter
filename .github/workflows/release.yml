@@ -30,6 +30,11 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # Without this the action runs "sdkmanager tools", and Google
+          # retired that package, so the step fails. The platform packages
+          # this build needs are installed by the next step.
+          packages: ""
 
       - name: Install Android platform packages
         run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
