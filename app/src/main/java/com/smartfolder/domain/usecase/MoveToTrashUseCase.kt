@@ -11,15 +11,25 @@ import javax.inject.Inject
 /**
  * Stages a deletion: the image is moved into a trash folder inside the source
  * tree instead of being destroyed, so the action stays undoable. The user
- * empties the trash folder from a file manager whenever they want.
+ * empties the trash folder from the trash screen whenever they want.
  */
 class MoveToTrashUseCase @Inject constructor(
     private val safFileOps: SafFileOps
 ) {
+    /**
+     * [warning] is set when the image was copied into the trash but the
+     * original could not be removed, so the caller can tell the user instead of
+     * reporting a clean delete while the file is still in the source folder.
+     */
+    data class TrashOutcome(
+        val entry: MoveImagesUseCase.MovedEntry,
+        val warning: String? = null
+    )
+
     suspend operator fun invoke(
         image: ImageInfo,
         sourceFolderUri: Uri
-    ): Result<MoveImagesUseCase.MovedEntry> = withContext(Dispatchers.IO) {
+    ): Result<TrashOutcome> = withContext(Dispatchers.IO) {
         when (val result = safFileOps.moveFileToChildFolder(
             sourceUri = image.uri,
             treeUri = sourceFolderUri,
@@ -27,9 +37,17 @@ class MoveToTrashUseCase @Inject constructor(
             displayName = image.displayName
         )) {
             is MoveResult.Moved ->
-                Result.success(MoveImagesUseCase.MovedEntry(image, result.newUri))
+                Result.success(
+                    TrashOutcome(MoveImagesUseCase.MovedEntry(image, result.newUri))
+                )
             is MoveResult.CopiedOnly ->
-                Result.success(MoveImagesUseCase.MovedEntry(image, result.newUri))
+                Result.success(
+                    TrashOutcome(
+                        entry = MoveImagesUseCase.MovedEntry(image, result.newUri),
+                        warning = "${image.displayName}: copied to the trash folder, " +
+                            "but the original is still in the source folder (${result.reason})"
+                    )
+                )
             is MoveResult.Failure ->
                 Result.failure(IllegalStateException("${image.displayName}: ${result.error}"))
         }

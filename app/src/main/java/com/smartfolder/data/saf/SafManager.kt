@@ -128,7 +128,9 @@ class SafManager @Inject constructor(
 
                         if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
                             // The staging trash must not feed back into the queue.
-                            if (recursive && name != SafFileOps.TRASH_FOLDER_NAME) queue.add(docId)
+                            // Matched by pattern so numbered duplicates left by a
+                            // provider ("ImageSorterTrash (1)") stay out too.
+                            if (recursive && !SafFileOps.isTrashFolderName(name)) queue.add(docId)
                             continue
                         }
 
@@ -181,7 +183,7 @@ class SafManager @Inject constructor(
      */
     fun listImageFilesInFolder(treeUri: Uri, folderDocumentUri: Uri): List<SafImageFile> {
         val docId = runCatching { DocumentsContract.getDocumentId(folderDocumentUri) }.getOrNull()
-            ?: return emptyList()
+            ?: throw SafAccessException("Cannot resolve the folder $folderDocumentUri")
         val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, docId)
         val projection = arrayOf(
             DocumentsContract.Document.COLUMN_DOCUMENT_ID,
@@ -217,8 +219,9 @@ class SafManager @Inject constructor(
                     )
                 }
             }
-        } catch (_: Exception) {
-            return emptyList()
+        } catch (e: Exception) {
+            // Swallowing this used to make an unreadable folder look empty.
+            throw SafAccessException(e.message ?: "The folder could not be read", e)
         }
         return results
     }

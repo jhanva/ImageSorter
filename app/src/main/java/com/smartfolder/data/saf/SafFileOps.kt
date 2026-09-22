@@ -17,6 +17,17 @@ class SafFileOps @Inject constructor(
 ) {
     companion object {
         const val TRASH_FOLDER_NAME = "ImageSorterTrash"
+
+        private val TRASH_FOLDER_REGEX =
+            Regex("^" + Regex.escape(TRASH_FOLDER_NAME) + "( \\(\\d+\\))?$")
+
+        /**
+         * A provider does not fail when a folder name is taken: it creates a
+         * numbered sibling ("ImageSorterTrash (1)") instead. Those siblings are
+         * trash folders too, so both the trash screen and the triage queue have
+         * to recognise them by pattern and not by exact name.
+         */
+        fun isTrashFolderName(name: String): Boolean = TRASH_FOLDER_REGEX.matches(name)
     }
 
     /**
@@ -74,13 +85,13 @@ class SafFileOps @Inject constructor(
         }
     }
 
-    fun findChildFolder(treeUri: Uri, childFolderName: String): Uri? {
-        val cacheKey = treeUri to childFolderName
-        childFolderCache[cacheKey]?.let { return it }
-        return findChildFolderUncached(treeUri, childFolderName)?.also {
-            childFolderCache[cacheKey] = it
-        }
-    }
+    /**
+     * Every trash folder directly under the tree, including the numbered
+     * duplicates a provider may have created in earlier sessions, so staged
+     * images are never left stranded in a folder nothing reads.
+     */
+    fun findTrashFolders(treeUri: Uri): List<ChildFolder> =
+        listChildFolders(treeUri).filter { isTrashFolderName(it.displayName) }
 
     /**
      * Resolves a direct child folder with ONE children query instead of
@@ -88,9 +99,11 @@ class SafFileOps @Inject constructor(
      * UI on folders with thousands of files.
      */
     private fun findOrCreateChildFolder(treeUri: Uri, childFolderName: String): Uri? {
-        findChildFolderUncached(treeUri, childFolderName)?.let { return it }
+        runCatching { listChildFolders(treeUri) }.getOrNull()
+            ?.firstOrNull { it.displayName == childFolderName }
+            ?.let { return it.uri }
 
-        return try {
+        val created = try {
             val rootDocId = DocumentsContract.getTreeDocumentId(treeUri)
             val rootUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, rootDocId)
             DocumentsContract.createDocument(
@@ -101,12 +114,43 @@ class SafFileOps @Inject constructor(
             )
         } catch (_: Exception) {
             null
+        } ?: return null
+
+        // createDocument does not fail on a name clash: it silently creates
+        // "<name> (1)". That duplicate would collect the deleted images while
+        // the trash screen kept reading the original folder, so drop the empty
+        // duplicate and reuse the folder that was already there.
+        val createdName = queryDisplayName(created)
+        if (createdName != null && createdName != childFolderName) {
+            val original = runCatching { listChildFolders(treeUri) }.getOrNull()
+                ?.firstOrNull { it.displayName == childFolderName }
+            if (original != null) {
+                deleteDocument(created)
+                return original.uri
+            }
+        }
+        return created
+    }
+
+    private fun queryDisplayName(documentUri: Uri): String? {
+        val projection = arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+        return try {
+            context.contentResolver.query(documentUri, projection, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+        } catch (_: Exception) {
+            null
         }
     }
 
-    private fun findChildFolderUncached(treeUri: Uri, childFolderName: String): Uri? {
+    /**
+     * Lists the direct child folders of the tree with a single children query.
+     * Throws instead of returning an empty list so a permission or provider
+     * failure is reported to the user rather than looking like an empty folder.
+     */
+    private fun listChildFolders(treeUri: Uri): List<ChildFolder> {
         val rootDocId = runCatching { DocumentsContract.getTreeDocumentId(treeUri) }.getOrNull()
-            ?: return null
+            ?: throw SafAccessException("Cannot resolve the source folder")
         val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, rootDocId)
         val projection = arrayOf(
             DocumentsContract.Document.COLUMN_DOCUMENT_ID,
@@ -114,26 +158,33 @@ class SafFileOps @Inject constructor(
             DocumentsContract.Document.COLUMN_MIME_TYPE
         )
 
+        val folders = mutableListOf<ChildFolder>()
         try {
-            context.contentResolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
-                val idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-                val nameCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-                val mimeCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
-                while (cursor.moveToNext()) {
-                    if (cursor.getString(mimeCol) == DocumentsContract.Document.MIME_TYPE_DIR &&
-                        cursor.getString(nameCol) == childFolderName
-                    ) {
-                        return DocumentsContract.buildDocumentUriUsingTree(
-                            treeUri,
-                            cursor.getString(idCol)
+            val cursor = context.contentResolver.query(childrenUri, projection, null, null, null)
+                ?: throw SafAccessException("The source folder could not be read")
+            cursor.use {
+                val idCol = it.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                val nameCol = it.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                val mimeCol = it.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
+                while (it.moveToNext()) {
+                    if (it.getString(mimeCol) != DocumentsContract.Document.MIME_TYPE_DIR) continue
+                    val name = it.getString(nameCol) ?: continue
+                    val docId = it.getString(idCol) ?: continue
+                    folders.add(
+                        ChildFolder(
+                            uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId),
+                            displayName = name,
+                            relativePath = docId.substringAfter(':', docId)
                         )
-                    }
+                    )
                 }
             }
-        } catch (_: Exception) {
-            return null
+        } catch (e: SafAccessException) {
+            throw e
+        } catch (e: Exception) {
+            throw SafAccessException(e.message ?: "The source folder could not be read", e)
         }
-        return null
+        return folders
     }
 
     private fun copyThenDeleteIntoUri(
@@ -343,3 +394,14 @@ internal object DestinationNameResolver {
         }
     }
 }
+
+/**
+ * A direct child folder of a granted tree. [relativePath] is the provider
+ * document id without its volume prefix ("DCIM/Camera/ImageSorterTrash"), which
+ * is what the user sees in a file manager.
+ */
+data class ChildFolder(
+    val uri: Uri,
+    val displayName: String,
+    val relativePath: String
+)

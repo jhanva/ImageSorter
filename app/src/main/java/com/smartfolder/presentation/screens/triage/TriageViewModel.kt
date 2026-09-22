@@ -123,14 +123,15 @@ class TriageViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isBusy = true, error = null, warning = null)
             val result = moveToTrashUseCase(image, sourceUri)
             result.fold(
-                onSuccess = { entry ->
-                    decisions.addLast(Decision.Deleted(entry))
+                onSuccess = { outcome ->
+                    decisions.addLast(Decision.Deleted(outcome.entry))
                     val current = _uiState.value
                     _uiState.value = current.copy(
                         isBusy = false,
                         currentIndex = current.currentIndex + 1,
                         deletedCount = current.deletedCount + 1,
-                        canUndo = true
+                        canUndo = true,
+                        warning = outcome.warning
                     )
                     persistPosition()
                 },

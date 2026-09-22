@@ -2,6 +2,7 @@ package com.smartfolder.presentation.screens.trash
 
 import android.net.TestUri
 import androidx.lifecycle.SavedStateHandle
+import com.smartfolder.data.saf.SafAccessException
 import com.smartfolder.domain.model.Folder
 import com.smartfolder.domain.model.FolderRole
 import com.smartfolder.domain.model.ImageInfo
@@ -58,7 +59,12 @@ class TrashViewModelTest {
 
     private suspend fun setupLoaded(items: List<ImageInfo>) {
         `when`(folderRepository.getById(sourceFolder.id)).thenReturn(sourceFolder)
-        `when`(listTrashImagesUseCase.invoke(sourceFolder)).thenReturn(items)
+        `when`(listTrashImagesUseCase.invoke(sourceFolder)).thenReturn(
+            ListTrashImagesUseCase.TrashListing(
+                items = items,
+                folderPaths = listOf("Download/ImageSorterTrash")
+            )
+        )
     }
 
     private fun viewModel() = TrashViewModel(
@@ -139,6 +145,30 @@ class TrashViewModelTest {
         val state = awaitState(vm) { it.items.isEmpty() && !it.isBusy }
 
         assertTrue(state.items.isEmpty())
+    }
+
+    @Test
+    fun `listing failure reports the error instead of an empty trash`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            `when`(folderRepository.getById(sourceFolder.id)).thenReturn(sourceFolder)
+            `when`(listTrashImagesUseCase.invoke(sourceFolder))
+                .thenThrow(SafAccessException("no permission"))
+
+            val vm = viewModel()
+            val state = awaitState(vm) { !it.isLoading }
+
+            assertEquals("no permission", state.error)
+            assertTrue(state.items.isEmpty())
+        }
+
+    @Test
+    fun `exposes the trash folder path`() = runTest(mainDispatcherRule.dispatcher) {
+        setupLoaded(listOf(image(1L)))
+
+        val vm = viewModel()
+        val state = awaitState(vm) { !it.isLoading }
+
+        assertEquals(listOf("Download/ImageSorterTrash"), state.trashFolderPaths)
     }
 
     @Test

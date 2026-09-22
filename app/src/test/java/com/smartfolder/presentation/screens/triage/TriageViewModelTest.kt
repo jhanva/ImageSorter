@@ -10,6 +10,7 @@ import com.smartfolder.domain.model.ImageInfo
 import com.smartfolder.domain.repository.FolderRepository
 import com.smartfolder.domain.usecase.ListSourceImagesUseCase
 import com.smartfolder.domain.usecase.MoveImagesUseCase
+import com.smartfolder.domain.usecase.MoveToTrashUseCase
 import com.smartfolder.domain.usecase.UndoMoveUseCase
 import com.smartfolder.testutil.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -298,7 +299,13 @@ class TriageViewModelTest {
         setupHappyPath(listOf(first, second))
         val trashUri = TestUri("content://trash/img1")
         `when`(moveToTrashUseCase.invoke(first, sourceFolder.uri))
-            .thenReturn(Result.success(MoveImagesUseCase.MovedEntry(first, trashUri)))
+            .thenReturn(
+                Result.success(
+                    MoveToTrashUseCase.TrashOutcome(
+                        MoveImagesUseCase.MovedEntry(first, trashUri)
+                    )
+                )
+            )
 
         val vm = viewModel()
         awaitState(vm) { !it.isLoading }
@@ -317,7 +324,13 @@ class TriageViewModelTest {
         setupHappyPath(listOf(first, image(2L)))
         val trashUri = TestUri("content://trash/img1")
         `when`(moveToTrashUseCase.invoke(first, sourceFolder.uri))
-            .thenReturn(Result.success(MoveImagesUseCase.MovedEntry(first, trashUri)))
+            .thenReturn(
+                Result.success(
+                    MoveToTrashUseCase.TrashOutcome(
+                        MoveImagesUseCase.MovedEntry(first, trashUri)
+                    )
+                )
+            )
         `when`(undoMoveUseCase.invoke(anyList()))
             .thenReturn(UndoMoveUseCase.UndoReport(restored = 1, failed = 0, errors = emptyList()))
 

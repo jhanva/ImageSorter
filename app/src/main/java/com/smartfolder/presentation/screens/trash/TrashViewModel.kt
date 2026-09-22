@@ -34,11 +34,12 @@ class TrashViewModel @Inject constructor(
             try {
                 val source = folderRepository.getById(folderId)
                     ?: error("Source folder not found")
-                val items = listTrashImagesUseCase(source)
+                val listing = listTrashImagesUseCase(source)
                 _uiState.value = TrashUiState(
                     isLoading = false,
                     sourceFolder = source,
-                    items = items
+                    items = listing.items,
+                    trashFolderPaths = listing.folderPaths
                 )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(

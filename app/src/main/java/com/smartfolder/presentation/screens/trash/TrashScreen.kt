@@ -131,6 +131,16 @@ fun TrashScreen(
                 ErrorBanner(message = error)
             }
 
+            // The staging folder lives inside the source tree, so show its path:
+            // otherwise there is no way to tell where the deleted images went.
+            uiState.trashFolderPaths.forEach { path ->
+                Text(
+                    text = stringResource(R.string.trash_folder_location, path),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
             when {
                 uiState.isLoading -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

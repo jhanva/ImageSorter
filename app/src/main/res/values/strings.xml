@@ -61,6 +61,7 @@
     <string name="trash_empty_confirm_title">Empty trash?</string>
     <string name="trash_empty_confirm_message">%1$d images will be deleted permanently. This cannot be undone.</string>
     <string name="trash_empty_confirm_action">Delete all</string>
+    <string name="trash_folder_location">Folder: %1$s</string>
     <string name="trash_empty_title">Trash is empty</string>
     <string name="trash_empty_message">Images you delete while sorting are staged here.</string>
     <string name="triage_deleted_summary">%1$d sent to the ImageSorterTrash folder inside the source. Empty it from your file manager when you are sure.</string>
