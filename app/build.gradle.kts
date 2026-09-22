@@ -93,6 +93,14 @@ android {
         }
     }
 
+    testOptions {
+        unitTests {
+            // android.util.Log and friends throw unless stubbed calls return
+            // defaults, which would fail any test touching logging code.
+            isReturnDefaultValues = true
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

@@ -47,6 +47,8 @@
     <!-- Triage -->
     <string name="triage_title">Sort images</string>
     <string name="triage_progress">%1$d left - %2$d moved</string>
+    <string name="triage_destinations_need_permission">No destinations: all files access is missing. Grant it from the home screen.</string>
+    <string name="triage_destinations_none">No image folders were found on this device apart from the one being sorted.</string>
     <string name="triage_destinations_used">Used</string>
     <string name="triage_destinations_others">All folders</string>
     <string name="triage_skip">Skip</string>

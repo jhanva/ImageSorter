@@ -1,5 +1,7 @@
 package com.smartfolder.domain.usecase
 
+import android.os.Environment
+import android.util.Log
 import com.smartfolder.data.media.MediaStoreFolderProvider
 import com.smartfolder.data.saf.SafFileOps
 import com.smartfolder.data.storage.DirectFileOps
@@ -22,8 +24,11 @@ class ListDestinationFoldersUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(source: Folder): List<Folder> = withContext(Dispatchers.IO) {
         val sourcePath = directFileOps.resolveFile(source.uri)?.absolutePath?.trimEnd('/')
+        val all = runCatching { mediaStoreFolderProvider.getImageFolders() }
+            .onFailure { Log.w(TAG, "The media index could not be read", it) }
+            .getOrDefault(emptyList())
 
-        mediaStoreFolderProvider.getImageFolders()
+        val destinations = all
             .asSequence()
             .filter { it.absolutePath.isNotBlank() }
             .map { option -> option to File(option.absolutePath) }
@@ -39,5 +44,19 @@ class ListDestinationFoldersUseCase @Inject constructor(
             }
             .distinctBy { it.uri.toString() }
             .toList()
+
+        // Secure Folder cannot be inspected from adb, so the counts are logged:
+        // an empty grid has to be traceable to the step that emptied it.
+        Log.i(
+            TAG,
+            "destinations: mediaStore=${all.size}, withPath=${all.count { it.absolutePath.isNotBlank() }}, " +
+                "offered=${destinations.size}, source=$sourcePath, " +
+                "storageRoot=${runCatching { Environment.getExternalStorageDirectory() }.getOrNull()}"
+        )
+        destinations
+    }
+
+    private companion object {
+        const val TAG = "ImageSorterDest"
     }
 }

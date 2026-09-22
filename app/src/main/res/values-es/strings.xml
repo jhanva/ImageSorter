@@ -47,6 +47,8 @@
     <!-- Triage -->
     <string name="triage_title">Clasificar imagenes</string>
     <string name="triage_progress">%1$d restantes - %2$d movidas</string>
+    <string name="triage_destinations_need_permission">Sin destinos: falta el acceso a todos los archivos. Concedelo desde la pantalla de inicio.</string>
+    <string name="triage_destinations_none">No se encontraron carpetas con imagenes en este dispositivo, aparte de la que estas clasificando.</string>
     <string name="triage_destinations_used">Usadas</string>
     <string name="triage_destinations_others">Todas las carpetas</string>
     <string name="triage_skip">Omitir</string>

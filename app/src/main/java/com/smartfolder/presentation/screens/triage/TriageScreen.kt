@@ -354,7 +354,11 @@ private fun DestinationButtons(
     val otherRows = (others.size + columns - 1) / columns
     val totalRows = (usedRows + otherRows).coerceAtLeast(1)
     val visibleRows = totalRows.coerceIn(1, 4)
-    val headerHeight = if (showSections) 36.dp else 0.dp
+    val headerHeight = when {
+        showSections -> 36.dp
+        used.isEmpty() && others.isEmpty() -> 44.dp
+        else -> 0.dp
+    }
     val gridHeight = buttonHeight * visibleRows + 8.dp * (visibleRows - 1) + headerHeight
 
     Column(
@@ -367,6 +371,20 @@ private fun DestinationButtons(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.heightIn(max = gridHeight)
         ) {
+            if (used.isEmpty() && others.isEmpty()) {
+                item(key = "no_destinations", span = { GridItemSpan(maxLineSpan) }) {
+                    Text(
+                        text = if (uiState.needsAllFilesAccess) {
+                            stringResource(R.string.triage_destinations_need_permission)
+                        } else {
+                            stringResource(R.string.triage_destinations_none)
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+
             if (showSections) {
                 item(key = "header_used", span = { GridItemSpan(maxLineSpan) }) {
                     DestinationSectionLabel(stringResource(R.string.triage_destinations_used))
