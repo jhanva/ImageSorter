@@ -18,10 +18,12 @@ class UndoMoveUseCaseTest {
 
     private val sourceFolderUri = TestUri("content://tree/source")
 
+    private val directFileOps = mock(com.smartfolder.data.storage.DirectFileOps::class.java)
+
     @Before
     fun setup() {
         safFileOps = mock(SafFileOps::class.java)
-        useCase = UndoMoveUseCase(safFileOps)
+        useCase = UndoMoveUseCase(safFileOps, directFileOps)
     }
 
     private fun entry(id: Long, name: String): UndoMoveUseCase.UndoEntry {

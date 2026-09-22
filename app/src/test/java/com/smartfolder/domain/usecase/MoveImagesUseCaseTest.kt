@@ -18,10 +18,12 @@ class MoveImagesUseCaseTest {
 
     private val destUri = mock(Uri::class.java)
 
+    private val directFileOps = mock(com.smartfolder.data.storage.DirectFileOps::class.java)
+
     @Before
     fun setup() {
         safFileOps = mock(SafFileOps::class.java)
-        useCase = MoveImagesUseCase(safFileOps)
+        useCase = MoveImagesUseCase(safFileOps, directFileOps)
     }
 
     @Test

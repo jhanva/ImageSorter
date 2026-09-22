@@ -3,6 +3,7 @@ package com.smartfolder.domain.usecase
 import android.net.Uri
 import com.smartfolder.data.saf.MoveResult
 import com.smartfolder.data.saf.SafFileOps
+import com.smartfolder.data.storage.DirectFileOps
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
@@ -12,7 +13,8 @@ import javax.inject.Inject
  * Reverts moved files back to their original folder.
  */
 class UndoMoveUseCase @Inject constructor(
-    private val safFileOps: SafFileOps
+    private val safFileOps: SafFileOps,
+    private val directFileOps: DirectFileOps
 ) {
     data class UndoEntry(
         val entry: MoveImagesUseCase.MovedEntry,
@@ -35,11 +37,19 @@ class UndoMoveUseCase @Inject constructor(
         for (undo in entries) {
             yield()
 
-            when (val result = safFileOps.moveFile(
-                sourceUri = undo.entry.newUri,
-                destinationFolderUri = undo.originalFolderUri,
-                displayName = undo.entry.image.displayName
-            )) {
+            val originalDir = directFileOps.resolveFile(undo.originalFolderUri)
+            val movedFile = directFileOps.resolveFile(undo.entry.newUri)
+            val result = if (originalDir != null && movedFile != null && movedFile.exists()) {
+                directFileOps.moveFile(movedFile, originalDir, undo.entry.image.displayName)
+            } else {
+                safFileOps.moveFile(
+                    sourceUri = undo.entry.newUri,
+                    destinationFolderUri = undo.originalFolderUri,
+                    displayName = undo.entry.image.displayName
+                )
+            }
+
+            when (result) {
                 is MoveResult.Moved -> {
                     restored++
                     restoredUris[undo.entry.image.id] = result.newUri

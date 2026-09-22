@@ -3,6 +3,7 @@ package com.smartfolder.data.media
 import android.content.ContentUris
 import android.content.Context
 import android.os.Build
+import android.os.Environment
 import android.provider.MediaStore
 import com.smartfolder.data.saf.SafImageFile
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -121,7 +122,14 @@ class MediaStoreFolderProvider @Inject constructor(
                     ?: documentId.substringAfter(':').substringAfterLast('/').ifBlank { "Internal storage" }
 
                 val entry = countsByDocId.getOrPut(documentId) {
-                    MutableFolder(displayName = displayName, imageCount = 0)
+                    MutableFolder(
+                        displayName = displayName,
+                        imageCount = 0,
+                        absolutePath = folderPathOf(absolutePath, relativePath)
+                    )
+                }
+                if (entry.absolutePath.isBlank()) {
+                    entry.absolutePath = folderPathOf(absolutePath, relativePath)
                 }
                 entry.imageCount += 1
             }
@@ -132,10 +140,29 @@ class MediaStoreFolderProvider @Inject constructor(
                 ImageFolderOption(
                     displayName = folder.displayName,
                     documentId = docId,
-                    imageCount = folder.imageCount
+                    imageCount = folder.imageCount,
+                    absolutePath = folder.absolutePath
                 )
             }
             .sortedWith(compareByDescending<ImageFolderOption> { it.imageCount }.thenBy { it.displayName.lowercase() })
+    }
+
+    /**
+     * The directory that holds the image. Derived from the file path when the
+     * provider gives one; otherwise from the relative path against this
+     * profile's external storage root, which differs per user (Secure Folder
+     * is /storage/emulated/150, not /0).
+     */
+    private fun folderPathOf(absoluteFilePath: String?, relativePath: String?): String {
+        val fromFile = absoluteFilePath
+            ?.replace('\\', '/')
+            ?.substringBeforeLast('/', "")
+            ?.takeIf { it.isNotBlank() }
+        if (fromFile != null) return fromFile
+
+        val relative = relativePath?.trim()?.trim('/').orEmpty()
+        val root = Environment.getExternalStorageDirectory()?.absolutePath ?: return ""
+        return if (relative.isBlank()) root else "$root/$relative"
     }
 
     private fun buildDocumentId(relativePath: String?, absolutePath: String?): String? {
@@ -177,6 +204,7 @@ class MediaStoreFolderProvider @Inject constructor(
 
     private data class MutableFolder(
         val displayName: String,
-        var imageCount: Int
+        var imageCount: Int,
+        var absolutePath: String = ""
     )
 }

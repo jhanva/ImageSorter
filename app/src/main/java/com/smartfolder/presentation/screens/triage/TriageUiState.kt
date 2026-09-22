@@ -1,6 +1,7 @@
 package com.smartfolder.presentation.screens.triage
 
 import com.smartfolder.domain.model.Folder
+import com.smartfolder.domain.model.key
 import com.smartfolder.domain.model.ImageInfo
 
 data class TriageUiState(
@@ -12,9 +13,11 @@ data class TriageUiState(
     val movedCount: Int = 0,
     val skippedCount: Int = 0,
     val deletedCount: Int = 0,
-    val movedByDestination: Map<Long, Int> = emptyMap(),
+    val movedByDestination: Map<String, Int> = emptyMap(),
     /** Destinations already used in this session; they are shown first. */
-    val usedDestinationIds: Set<Long> = emptySet(),
+    val usedDestinationKeys: Set<String> = emptySet(),
+    /** Set while all files access is missing: no destination can be written. */
+    val needsAllFilesAccess: Boolean = false,
     val canUndo: Boolean = false,
     val isBusy: Boolean = false,
     val error: String? = null,
@@ -27,11 +30,11 @@ data class TriageUiState(
      * folder list does not have to be scrolled again for the ones in play.
      */
     val usedDestinations: List<Folder>
-        get() = destinations.filter { it.id in usedDestinationIds }.sortedWith(byName)
+        get() = destinations.filter { it.key in usedDestinationKeys }.sortedWith(byName)
 
     /** The destinations not used yet, alphabetically. */
     val otherDestinations: List<Folder>
-        get() = destinations.filterNot { it.id in usedDestinationIds }.sortedWith(byName)
+        get() = destinations.filterNot { it.key in usedDestinationKeys }.sortedWith(byName)
 
     val current: ImageInfo? get() = queue.getOrNull(currentIndex)
 

@@ -6,6 +6,12 @@
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+    <!-- Destinations are every image folder on the device, so the app writes
+         outside any folder the user picked through SAF. That needs all files
+         access, granted by hand from settings. -->
+    <uses-permission
+        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
 
     <application
         android:name=".SmartFolderApp"

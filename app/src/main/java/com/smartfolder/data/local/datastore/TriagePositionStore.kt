@@ -39,17 +39,16 @@ class TriagePositionStore @Inject constructor(
         }
     }
 
-    suspend fun getUsedDestinations(folderId: Long): Set<Long> {
-        val stored = context.triagePositions.data.first()[usedKey(folderId)] ?: return emptySet()
-        return stored.mapNotNull { it.toLongOrNull() }.toSet()
+    suspend fun getUsedDestinations(folderId: Long): Set<String> {
+        return context.triagePositions.data.first()[usedKey(folderId)] ?: emptySet()
     }
 
-    suspend fun setUsedDestinations(folderId: Long, destinationIds: Set<Long>) {
+    suspend fun setUsedDestinations(folderId: Long, destinationKeys: Set<String>) {
         context.triagePositions.edit { prefs ->
-            if (destinationIds.isEmpty()) {
+            if (destinationKeys.isEmpty()) {
                 prefs.remove(usedKey(folderId))
             } else {
-                prefs[usedKey(folderId)] = destinationIds.map { it.toString() }.toSet()
+                prefs[usedKey(folderId)] = destinationKeys
             }
         }
     }

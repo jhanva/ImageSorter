@@ -4,7 +4,9 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartfolder.data.local.datastore.TriagePositionStore
-import com.smartfolder.domain.model.FolderRole
+import com.smartfolder.data.storage.AllFilesAccess
+import com.smartfolder.domain.model.key
+import com.smartfolder.domain.usecase.ListDestinationFoldersUseCase
 import com.smartfolder.domain.usecase.ListSourceImagesUseCase
 import com.smartfolder.domain.usecase.MoveImagesUseCase
 import com.smartfolder.domain.usecase.MoveToTrashUseCase
@@ -22,16 +24,18 @@ class TriageViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val folderRepository: FolderRepository,
     private val listSourceImagesUseCase: ListSourceImagesUseCase,
+    private val listDestinationFoldersUseCase: ListDestinationFoldersUseCase,
     private val moveImagesUseCase: MoveImagesUseCase,
     private val undoMoveUseCase: UndoMoveUseCase,
     private val moveToTrashUseCase: MoveToTrashUseCase,
-    private val positionStore: TriagePositionStore
+    private val positionStore: TriagePositionStore,
+    private val allFilesAccess: AllFilesAccess
 ) : ViewModel() {
 
     private sealed interface Decision {
         data class Moved(
             val entry: MoveImagesUseCase.MovedEntry,
-            val destinationId: Long
+            val destinationKey: String
         ) : Decision
 
         data class Deleted(
@@ -53,8 +57,7 @@ class TriageViewModel @Inject constructor(
             try {
                 val source = folderRepository.getById(folderId)
                     ?: error("Source folder not found")
-                val destinations = folderRepository.getByRole(FolderRole.DESTINATION)
-                    .sortedBy { it.id }
+                val destinations = listDestinationFoldersUseCase(source)
                 val queue = listSourceImagesUseCase(source)
                 val savedUri = runCatching { positionStore.getLastImageUri(folderId) }.getOrNull()
                 val usedDestinations = runCatching { positionStore.getUsedDestinations(folderId) }
@@ -69,7 +72,8 @@ class TriageViewModel @Inject constructor(
                     destinations = destinations,
                     queue = queue,
                     currentIndex = startIndex,
-                    usedDestinationIds = usedDestinations
+                    usedDestinationKeys = usedDestinations,
+                    needsAllFilesAccess = !allFilesAccess.isGranted()
                 )
             } catch (e: SecurityException) {
                 _uiState.value = _uiState.value.copy(
@@ -85,26 +89,26 @@ class TriageViewModel @Inject constructor(
         }
     }
 
-    fun moveTo(destinationId: Long) {
+    fun moveTo(destinationKey: String) {
         val state = _uiState.value
         if (state.isBusy) return
         val image = state.current ?: return
-        val destination = state.destinations.firstOrNull { it.id == destinationId } ?: return
+        val destination = state.destinations.firstOrNull { it.key == destinationKey } ?: return
 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isBusy = true, error = null, warning = null)
             val report = moveImagesUseCase(listOf(image), destination.uri)
             val entry = report.movedEntries.firstOrNull()
             if (entry != null) {
-                decisions.addLast(Decision.Moved(entry, destinationId))
+                decisions.addLast(Decision.Moved(entry, destinationKey))
                 val current = _uiState.value
                 _uiState.value = current.copy(
                     isBusy = false,
                     currentIndex = current.currentIndex + 1,
                     movedCount = current.movedCount + 1,
                     movedByDestination = current.movedByDestination +
-                        (destinationId to (current.movedByDestination[destinationId] ?: 0) + 1),
-                    usedDestinationIds = current.usedDestinationIds + destinationId,
+                        (destinationKey to (current.movedByDestination[destinationKey] ?: 0) + 1),
+                    usedDestinationKeys = current.usedDestinationKeys + destinationKey,
                     canUndo = true
                 )
                 persistPosition()
@@ -224,7 +228,7 @@ class TriageViewModel @Inject constructor(
                     )
                     val current = _uiState.value
                     if (report.restored > 0) {
-                        val previousCount = current.movedByDestination[last.destinationId] ?: 0
+                        val previousCount = current.movedByDestination[last.destinationKey] ?: 0
                         val restoredUri = report.restoredUris[last.entry.image.id]
                         val restoredQueue = if (restoredUri != null) {
                             current.queue.map { item ->
@@ -239,17 +243,17 @@ class TriageViewModel @Inject constructor(
                             currentIndex = (current.currentIndex - 1).coerceAtLeast(0),
                             movedCount = (current.movedCount - 1).coerceAtLeast(0),
                             movedByDestination = if (previousCount <= 1) {
-                                current.movedByDestination - last.destinationId
+                                current.movedByDestination - last.destinationKey
                             } else {
-                                current.movedByDestination + (last.destinationId to previousCount - 1)
+                                current.movedByDestination + (last.destinationKey to previousCount - 1)
                             },
                             // Undoing the only move to a destination puts it
                             // back with the rest, so the top group always
                             // reflects what the session actually used.
-                            usedDestinationIds = if (previousCount <= 1) {
-                                current.usedDestinationIds - last.destinationId
+                            usedDestinationKeys = if (previousCount <= 1) {
+                                current.usedDestinationKeys - last.destinationKey
                             } else {
-                                current.usedDestinationIds
+                                current.usedDestinationKeys
                             },
                             canUndo = decisions.isNotEmpty(),
                             error = null,
@@ -295,7 +299,7 @@ class TriageViewModel @Inject constructor(
     }
 
     private fun persistUsedDestinations() {
-        val used = _uiState.value.usedDestinationIds
+        val used = _uiState.value.usedDestinationKeys
         viewModelScope.launch {
             runCatching { positionStore.setUsedDestinations(folderId, used) }
         }

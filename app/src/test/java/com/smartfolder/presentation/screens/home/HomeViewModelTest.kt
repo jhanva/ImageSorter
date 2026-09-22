@@ -30,11 +30,14 @@ class HomeViewModelTest {
     private lateinit var mediaStoreFolderProvider: MediaStoreFolderProvider
     private val foldersFlow = MutableStateFlow<List<Folder>>(emptyList())
 
+    private lateinit var allFilesAccess: com.smartfolder.data.storage.AllFilesAccess
+
     @Before
     fun setup() {
         selectFolderUseCase = mock(SelectFolderUseCase::class.java)
         folderRepository = mock(FolderRepository::class.java)
         mediaStoreFolderProvider = mock(MediaStoreFolderProvider::class.java)
+        allFilesAccess = mock(com.smartfolder.data.storage.AllFilesAccess::class.java)
         `when`(mediaStoreFolderProvider.getImageFolders()).thenReturn(emptyList())
         `when`(folderRepository.observeAll()).thenReturn(foldersFlow)
     }
@@ -42,7 +45,8 @@ class HomeViewModelTest {
     private fun viewModel() = HomeViewModel(
         selectFolderUseCase = selectFolderUseCase,
         folderRepository = folderRepository,
-        mediaStoreFolderProvider = mediaStoreFolderProvider
+        mediaStoreFolderProvider = mediaStoreFolderProvider,
+        allFilesAccess = allFilesAccess
     )
 
     private fun folder(id: Long, role: FolderRole) = Folder(
@@ -66,40 +70,52 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `groups folders by role and sorts by id`() = runTest(mainDispatcherRule.dispatcher) {
+    fun `keeps only source folders, sorted by id`() = runTest(mainDispatcherRule.dispatcher) {
+        `when`(allFilesAccess.isGranted()).thenReturn(true)
         foldersFlow.value = listOf(
             folder(3L, FolderRole.SOURCE),
-            folder(1L, FolderRole.DESTINATION),
-            folder(2L, FolderRole.DESTINATION)
-        )
-
-        val vm = viewModel()
-        val state = awaitState(vm) { it.destinationFolders.isNotEmpty() }
-
-        assertEquals(listOf(1L, 2L), state.destinationFolders.map { it.id })
-        assertEquals(listOf(3L), state.sourceFolders.map { it.id })
-    }
-
-    @Test
-    fun `cannot start triage without both folder roles`() = runTest(mainDispatcherRule.dispatcher) {
-        foldersFlow.value = listOf(folder(1L, FolderRole.DESTINATION))
-
-        val vm = viewModel()
-        val state = awaitState(vm) { it.destinationFolders.isNotEmpty() }
-
-        assertFalse(state.canStartTriage)
-    }
-
-    @Test
-    fun `can start triage with at least one destination and one source`() = runTest(mainDispatcherRule.dispatcher) {
-        foldersFlow.value = listOf(
             folder(1L, FolderRole.DESTINATION),
             folder(2L, FolderRole.SOURCE)
         )
 
         val vm = viewModel()
-        val state = awaitState(vm) { it.canStartTriage }
+        val state = awaitState(vm) { it.sourceFolders.isNotEmpty() }
 
-        assertTrue(state.canStartTriage)
+        assertEquals(listOf(2L, 3L), state.sourceFolders.map { it.id })
     }
+
+    @Test
+    fun `cannot start triage without a source folder`() = runTest(mainDispatcherRule.dispatcher) {
+        `when`(allFilesAccess.isGranted()).thenReturn(true)
+        foldersFlow.value = listOf(folder(1L, FolderRole.DESTINATION))
+
+        val vm = viewModel()
+        val state = awaitState(vm) { !it.canStartTriage }
+
+        assertFalse(state.canStartTriage)
+    }
+
+    @Test
+    fun `cannot start triage without all files access`() = runTest(mainDispatcherRule.dispatcher) {
+        `when`(allFilesAccess.isGranted()).thenReturn(false)
+        foldersFlow.value = listOf(folder(2L, FolderRole.SOURCE))
+
+        val vm = viewModel()
+        val state = awaitState(vm) { it.sourceFolders.isNotEmpty() }
+
+        assertFalse(state.hasAllFilesAccess)
+        assertFalse(state.canStartTriage)
+    }
+
+    @Test
+    fun `can start triage with a source folder and the permission`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            `when`(allFilesAccess.isGranted()).thenReturn(true)
+            foldersFlow.value = listOf(folder(2L, FolderRole.SOURCE))
+
+            val vm = viewModel()
+            val state = awaitState(vm) { it.canStartTriage }
+
+            assertTrue(state.canStartTriage)
+        }
 }

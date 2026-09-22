@@ -1,9 +1,11 @@
 package com.smartfolder.presentation.screens.home
 
+import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartfolder.data.media.MediaStoreFolderProvider
+import com.smartfolder.data.storage.AllFilesAccess
 import com.smartfolder.domain.model.Folder
 import com.smartfolder.domain.model.FolderRole
 import com.smartfolder.domain.repository.FolderRepository
@@ -21,7 +23,8 @@ import javax.inject.Inject
 class HomeViewModel @Inject constructor(
     private val selectFolderUseCase: SelectFolderUseCase,
     private val folderRepository: FolderRepository,
-    private val mediaStoreFolderProvider: MediaStoreFolderProvider
+    private val mediaStoreFolderProvider: MediaStoreFolderProvider,
+    private val allFilesAccess: AllFilesAccess
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -29,29 +32,36 @@ class HomeViewModel @Inject constructor(
 
     init {
         observeFolders()
+        refreshPermission()
     }
+
+    /**
+     * All files access is granted outside the app, so it is re-read whenever
+     * the screen comes back to the foreground.
+     */
+    fun refreshPermission() {
+        val granted = allFilesAccess.isGranted()
+        _uiState.value = _uiState.value.copy(
+            hasAllFilesAccess = granted,
+            canStartTriage = granted && _uiState.value.sourceFolders.isNotEmpty()
+        )
+    }
+
+    fun permissionSettingsIntents(): List<Intent> = allFilesAccess.settingsIntents()
 
     private fun observeFolders() {
         viewModelScope.launch {
             folderRepository.observeAll().collect { folders ->
-                val destinationFolders = folders
-                    .filter { it.role == FolderRole.DESTINATION }
-                    .sortedBy { it.id }
                 val sourceFolders = folders
                     .filter { it.role == FolderRole.SOURCE }
                     .sortedBy { it.id }
 
                 _uiState.value = _uiState.value.copy(
-                    destinationFolders = destinationFolders,
                     sourceFolders = sourceFolders,
-                    canStartTriage = destinationFolders.isNotEmpty() && sourceFolders.isNotEmpty()
+                    canStartTriage = allFilesAccess.isGranted() && sourceFolders.isNotEmpty()
                 )
             }
         }
-    }
-
-    fun addDestinationFolder(uri: Uri) {
-        addFolder(uri, FolderRole.DESTINATION)
     }
 
     fun addSourceFolder(uri: Uri) {

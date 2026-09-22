@@ -61,6 +61,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.smartfolder.R
 import com.smartfolder.domain.model.Folder
+import com.smartfolder.domain.model.key
 import com.smartfolder.domain.model.ImageInfo
 import com.smartfolder.presentation.components.EmptyState
 import com.smartfolder.presentation.components.ErrorBanner
@@ -311,9 +312,9 @@ fun TriageScreen(
 
                         DestinationButtons(
                             uiState = uiState,
-                            onMove = { destinationId ->
+                            onMove = { destinationKey ->
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                viewModel.moveTo(destinationId)
+                                viewModel.moveTo(destinationKey)
                             },
                             onSkip = { viewModel.skip() },
                             onDelete = {
@@ -331,7 +332,7 @@ fun TriageScreen(
 @Composable
 private fun DestinationButtons(
     uiState: TriageUiState,
-    onMove: (Long) -> Unit,
+    onMove: (String) -> Unit,
     onSkip: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -371,7 +372,7 @@ private fun DestinationButtons(
                     DestinationSectionLabel(stringResource(R.string.triage_destinations_used))
                 }
             }
-            items(used, key = { "used_${it.id}" }) { destination ->
+            items(used, key = { "used_${it.key}" }) { destination ->
                 DestinationButton(
                     destination = destination,
                     columns = columns,
@@ -385,7 +386,7 @@ private fun DestinationButtons(
                     DestinationSectionLabel(stringResource(R.string.triage_destinations_others))
                 }
             }
-            items(others, key = { "other_${it.id}" }) { destination ->
+            items(others, key = { "other_${it.key}" }) { destination ->
                 DestinationButton(
                     destination = destination,
                     columns = columns,
@@ -443,10 +444,10 @@ private fun DestinationButton(
     columns: Int,
     buttonHeight: Dp,
     enabled: Boolean,
-    onMove: (Long) -> Unit
+    onMove: (String) -> Unit
 ) {
     Button(
-        onClick = { onMove(destination.id) },
+        onClick = { onMove(destination.key) },
         enabled = enabled,
         contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
         modifier = Modifier.heightIn(min = buttonHeight)
@@ -469,7 +470,7 @@ private fun TriageSummary(
     uiState: TriageUiState,
     onDone: () -> Unit
 ) {
-    val foldersById = uiState.destinations.associateBy { it.id }
+    val foldersByKey = uiState.destinations.associateBy { it.key }
 
     Column(
         modifier = Modifier
@@ -503,8 +504,8 @@ private fun TriageSummary(
             )
         }
 
-        uiState.movedByDestination.forEach { (destinationId, count) ->
-            val name = foldersById[destinationId]?.displayName ?: return@forEach
+        uiState.movedByDestination.forEach { (destinationKey, count) ->
+            val name = foldersByKey[destinationKey]?.displayName ?: return@forEach
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween

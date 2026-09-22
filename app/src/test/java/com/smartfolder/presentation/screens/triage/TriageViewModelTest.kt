@@ -6,6 +6,7 @@ import androidx.lifecycle.SavedStateHandle
 import com.smartfolder.data.saf.SafImageFile
 import com.smartfolder.domain.model.Folder
 import com.smartfolder.domain.model.FolderRole
+import com.smartfolder.domain.model.key
 import com.smartfolder.domain.model.ImageInfo
 import com.smartfolder.domain.repository.FolderRepository
 import com.smartfolder.domain.usecase.ListSourceImagesUseCase
@@ -39,6 +40,8 @@ class TriageViewModelTest {
     private lateinit var undoMoveUseCase: UndoMoveUseCase
     private lateinit var moveToTrashUseCase: com.smartfolder.domain.usecase.MoveToTrashUseCase
     private lateinit var positionStore: com.smartfolder.data.local.datastore.TriagePositionStore
+    private lateinit var listDestinationFoldersUseCase: com.smartfolder.domain.usecase.ListDestinationFoldersUseCase
+    private lateinit var allFilesAccess: com.smartfolder.data.storage.AllFilesAccess
 
     private val sourceFolder = Folder(
         id = 1L,
@@ -67,6 +70,9 @@ class TriageViewModelTest {
         undoMoveUseCase = mock(UndoMoveUseCase::class.java)
         moveToTrashUseCase = mock(com.smartfolder.domain.usecase.MoveToTrashUseCase::class.java)
         positionStore = mock(com.smartfolder.data.local.datastore.TriagePositionStore::class.java)
+        listDestinationFoldersUseCase =
+            mock(com.smartfolder.domain.usecase.ListDestinationFoldersUseCase::class.java)
+        allFilesAccess = mock(com.smartfolder.data.storage.AllFilesAccess::class.java)
     }
 
     private fun image(id: Long, name: String = "img$id.jpg") = ImageInfo(
@@ -81,8 +87,9 @@ class TriageViewModelTest {
 
     private suspend fun setupHappyPath(images: List<ImageInfo>) {
         `when`(folderRepository.getById(sourceFolder.id)).thenReturn(sourceFolder)
-        `when`(folderRepository.getByRole(FolderRole.DESTINATION))
+        `when`(listDestinationFoldersUseCase.invoke(sourceFolder))
             .thenReturn(listOf(destinationA, destinationB))
+        `when`(allFilesAccess.isGranted()).thenReturn(true)
         `when`(listSourceImagesUseCase.invoke(sourceFolder)).thenReturn(images)
     }
 
@@ -90,10 +97,12 @@ class TriageViewModelTest {
         savedStateHandle = SavedStateHandle(mapOf("folderId" to sourceFolder.id)),
         folderRepository = folderRepository,
         listSourceImagesUseCase = listSourceImagesUseCase,
+        listDestinationFoldersUseCase = listDestinationFoldersUseCase,
         moveImagesUseCase = moveImagesUseCase,
         undoMoveUseCase = undoMoveUseCase,
         moveToTrashUseCase = moveToTrashUseCase,
-        positionStore = positionStore
+        positionStore = positionStore,
+        allFilesAccess = allFilesAccess
     )
 
     private suspend fun awaitState(
@@ -126,7 +135,7 @@ class TriageViewModelTest {
         val state = awaitState(vm) { !it.isLoading }
 
         assertEquals("Descargas", state.sourceFolder?.displayName)
-        assertEquals(listOf(100L, 101L), state.destinations.map { it.id })
+        assertEquals(listOf("Memes", "Familia"), state.destinations.map { it.displayName })
         assertEquals(2, state.totalCount)
         assertEquals(1L, state.current?.id)
     }
@@ -143,12 +152,12 @@ class TriageViewModelTest {
         val vm = viewModel()
         awaitState(vm) { !it.isLoading }
 
-        vm.moveTo(destinationA.id)
+        vm.moveTo(destinationA.key)
         val state = awaitState(vm) { it.movedCount == 1 }
 
         verify(moveImagesUseCase).invoke(listOf(first), destinationA.uri)
         assertEquals(2L, state.current?.id)
-        assertEquals(mapOf(destinationA.id to 1), state.movedByDestination)
+        assertEquals(mapOf(destinationA.key to 1), state.movedByDestination)
         assertTrue(state.canUndo)
     }
 
@@ -178,14 +187,14 @@ class TriageViewModelTest {
 
         val vm = viewModel()
         awaitState(vm) { !it.isLoading }
-        vm.moveTo(destinationA.id)
+        vm.moveTo(destinationA.key)
         awaitState(vm) { it.movedCount == 1 }
 
         vm.undoLast()
         val state = awaitState(vm) { it.movedCount == 0 }
 
         assertEquals(1L, state.current?.id)
-        assertEquals(emptyMap<Long, Int>(), state.movedByDestination)
+        assertEquals(emptyMap<String, Int>(), state.movedByDestination)
         assertNull(state.error)
         assertNull(state.warning)
     }
@@ -209,7 +218,7 @@ class TriageViewModelTest {
 
         val vm = viewModel()
         awaitState(vm) { !it.isLoading }
-        vm.moveTo(destinationA.id)
+        vm.moveTo(destinationA.key)
         awaitState(vm) { it.movedCount == 1 }
 
         vm.undoLast()
@@ -241,7 +250,7 @@ class TriageViewModelTest {
 
         val vm = viewModel()
         awaitState(vm) { !it.isLoading }
-        vm.moveTo(destinationA.id)
+        vm.moveTo(destinationA.key)
         awaitState(vm) { it.movedCount == 1 }
 
         vm.undoLast()
@@ -285,7 +294,7 @@ class TriageViewModelTest {
         val vm = viewModel()
         awaitState(vm) { !it.isLoading }
 
-        vm.moveTo(destinationA.id)
+        vm.moveTo(destinationA.key)
         val state = awaitState(vm) { it.error != null }
 
         assertEquals(1L, state.current?.id)
@@ -441,11 +450,11 @@ class TriageViewModelTest {
         val vm = viewModel()
         awaitState(vm) { !it.isLoading }
 
-        vm.moveTo(destinationA.id)
+        vm.moveTo(destinationA.key)
         val state = awaitState(vm) { it.isComplete }
 
         assertNull(state.current)
-        assertNotNull(state.movedByDestination[destinationA.id])
+        assertNotNull(state.movedByDestination[destinationA.key])
     }
 
     @Test
@@ -470,7 +479,7 @@ class TriageViewModelTest {
             val vm = viewModel()
             awaitState(vm) { !it.isLoading }
 
-            vm.moveTo(destinationA.id)
+            vm.moveTo(destinationA.key)
             val state = awaitState(vm) { it.movedCount == 1 }
 
             assertEquals(listOf("Memes"), state.usedDestinations.map { it.displayName })
@@ -491,9 +500,9 @@ class TriageViewModelTest {
             val vm = viewModel()
             awaitState(vm) { !it.isLoading }
 
-            vm.moveTo(destinationA.id)
+            vm.moveTo(destinationA.key)
             awaitState(vm) { it.movedCount == 1 }
-            vm.moveTo(destinationB.id)
+            vm.moveTo(destinationB.key)
             val state = awaitState(vm) { it.movedCount == 2 }
 
             // Memes was used first, but the group stays alphabetical.
@@ -513,7 +522,7 @@ class TriageViewModelTest {
 
             val vm = viewModel()
             awaitState(vm) { !it.isLoading }
-            vm.moveTo(destinationA.id)
+            vm.moveTo(destinationA.key)
             awaitState(vm) { it.movedCount == 1 }
 
             vm.undoLast()
@@ -528,7 +537,7 @@ class TriageViewModelTest {
         runTest(mainDispatcherRule.dispatcher) {
             setupHappyPath(listOf(image(1L)))
             `when`(positionStore.getUsedDestinations(sourceFolder.id))
-                .thenReturn(setOf(destinationB.id))
+                .thenReturn(setOf(destinationB.key))
 
             val vm = viewModel()
             val state = awaitState(vm) { !it.isLoading }

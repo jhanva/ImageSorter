@@ -18,8 +18,10 @@ data class HomeHeroContent(
 object HomeVisuals {
 
     fun buildHeroContent(state: HomeUiState): HomeHeroContent {
+        // Destinations are not picked any more, so setup is the storage
+        // permission plus at least one source folder.
         val completedSteps = buildList {
-            add(state.destinationFolders.isNotEmpty())
+            add(state.hasAllFilesAccess)
             add(state.sourceFolders.isNotEmpty())
         }.count { it }
         val totalSteps = 2

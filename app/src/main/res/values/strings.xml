@@ -20,6 +20,9 @@
     <string name="action_choose_folders">Choose folders</string>
     <string name="home_destinations_title">Destinations</string>
     <string name="home_destinations_empty">Add the folders you want images routed into.</string>
+    <string name="home_storage_permission_title">All files access needed</string>
+    <string name="home_storage_permission_message">Destinations are every image folder on the device, so the app needs all files access to move images into them. Grant it once in settings.</string>
+    <string name="home_storage_permission_action">Open settings</string>
     <string name="home_sources_title">Sources</string>
     <string name="home_sources_empty">Add one or more folders with unsorted images.</string>
     <string name="home_add_folder">Add folder</string>

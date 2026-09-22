@@ -91,10 +91,7 @@ fun HomeScreen(
     ) { uri ->
         val role = pendingRole
         if (uri != null && role != null) {
-            when (role) {
-                FolderSelectRole.DESTINATION -> viewModel.addDestinationFolder(uri)
-                FolderSelectRole.SOURCE -> viewModel.addSourceFolder(uri)
-            }
+            viewModel.addSourceFolder(uri)
         }
         if (uri != null && role != null && pendingBatchIds.isNotEmpty()) {
             nextPickerDocumentId = pendingBatchIds.first()
@@ -127,6 +124,22 @@ fun HomeScreen(
         }
     }
 
+    val storageSettingsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        viewModel.refreshPermission()
+    }
+
+    fun openStorageSettings() {
+        val intents = viewModel.permissionSettingsIntents()
+        for (intent in intents) {
+            if (intent.resolveActivity(context.packageManager) != null) {
+                storageSettingsLauncher.launch(intent)
+                return
+            }
+        }
+    }
+
     fun openFolderPicker(role: FolderSelectRole) {
         pendingRole = role
         val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -156,7 +169,7 @@ fun HomeScreen(
                     showSourcePicker = true
                 }
             }
-            uiState.destinationFolders.isEmpty() -> openFolderPicker(FolderSelectRole.DESTINATION)
+            !uiState.hasAllFilesAccess -> openStorageSettings()
             else -> openFolderPicker(FolderSelectRole.SOURCE)
         }
     }
@@ -276,13 +289,9 @@ fun HomeScreen(
                 onPrimaryAction = ::handleHeroAction
             )
 
-            FolderSection(
-                title = stringResource(R.string.home_destinations_title),
-                emptyMessage = stringResource(R.string.home_destinations_empty),
-                folders = uiState.destinationFolders,
-                onAddFolder = { openFolderPicker(FolderSelectRole.DESTINATION) },
-                onRemoveFolder = { folderPendingRemoval = it }
-            )
+            if (!uiState.hasAllFilesAccess) {
+                StoragePermissionCard(onGrant = ::openStorageSettings)
+            }
 
             FolderSection(
                 title = stringResource(R.string.home_sources_title),
@@ -295,8 +304,37 @@ fun HomeScreen(
     }
 }
 
+@Composable
+private fun StoragePermissionCard(onGrant: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.home_storage_permission_title),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+            Text(
+                text = stringResource(R.string.home_storage_permission_message),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+            Button(onClick = onGrant) {
+                Text(stringResource(R.string.home_storage_permission_action))
+            }
+        }
+    }
+}
+
 private enum class FolderSelectRole {
-    DESTINATION,
     SOURCE
 }
 

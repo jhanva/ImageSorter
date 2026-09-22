@@ -12,8 +12,8 @@ import org.junit.Test
 class HomeVisualsTest {
 
     @Test
-    fun `stage is setup when folders are missing`() {
-        val state = HomeUiState()
+    fun `stage is setup when setup is incomplete`() {
+        val state = HomeUiState(hasAllFilesAccess = false)
 
         val hero = HomeVisuals.buildHeroContent(state)
 
@@ -23,9 +23,9 @@ class HomeVisualsTest {
     }
 
     @Test
-    fun `stage is ready when both folder groups exist`() {
+    fun `stage is ready with the permission and a source`() {
         val state = HomeUiState(
-            destinationFolders = listOf(folder(id = 1, role = FolderRole.DESTINATION)),
+            hasAllFilesAccess = true,
             sourceFolders = listOf(folder(id = 2, role = FolderRole.SOURCE)),
             canStartTriage = true
         )
@@ -38,9 +38,9 @@ class HomeVisualsTest {
     }
 
     @Test
-    fun `progress counts each selected folder group`() {
+    fun `progress counts the permission and the source folders`() {
         val state = HomeUiState(
-            destinationFolders = listOf(folder(id = 1, role = FolderRole.DESTINATION))
+            hasAllFilesAccess = true
         )
 
         val hero = HomeVisuals.buildHeroContent(state)

@@ -20,6 +20,9 @@
     <string name="action_choose_folders">Elegir carpetas</string>
     <string name="home_destinations_title">Destinos</string>
     <string name="home_destinations_empty">Agrega las carpetas a las que quieres mover imagenes.</string>
+    <string name="home_storage_permission_title">Falta el acceso a todos los archivos</string>
+    <string name="home_storage_permission_message">Los destinos son todas las carpetas con imagenes del dispositivo, asi que la app necesita acceso a todos los archivos para mover imagenes a ellas. Concedelo una vez en ajustes.</string>
+    <string name="home_storage_permission_action">Abrir ajustes</string>
     <string name="home_sources_title">Origenes</string>
     <string name="home_sources_empty">Agrega una o mas carpetas con imagenes sin ordenar.</string>
     <string name="home_add_folder">Agregar carpeta</string>

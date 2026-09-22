@@ -3,6 +3,7 @@ package com.smartfolder.domain.usecase
 import android.net.Uri
 import com.smartfolder.data.saf.MoveResult
 import com.smartfolder.data.saf.SafFileOps
+import com.smartfolder.data.storage.DirectFileOps
 import com.smartfolder.domain.model.ImageInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -10,7 +11,8 @@ import kotlinx.coroutines.yield
 import javax.inject.Inject
 
 class MoveImagesUseCase @Inject constructor(
-    private val safFileOps: SafFileOps
+    private val safFileOps: SafFileOps,
+    private val directFileOps: DirectFileOps
 ) {
     data class MovedEntry(
         val image: ImageInfo,
@@ -40,11 +42,19 @@ class MoveImagesUseCase @Inject constructor(
         for (image in images) {
             yield()
 
-            val result = safFileOps.moveFile(
-                sourceUri = image.uri,
-                destinationFolderUri = destinationFolderUri,
-                displayName = image.displayName
-            )
+            // A destination read from the media index is a plain path, so it
+            // is moved directly; a folder granted through SAF still goes
+            // through the document provider.
+            val destinationDir = directFileOps.resolveFile(destinationFolderUri)
+            val result = if (destinationFolderUri.scheme == "file" && destinationDir != null) {
+                directFileOps.moveFile(image.uri, destinationDir.absolutePath, image.displayName)
+            } else {
+                safFileOps.moveFile(
+                    sourceUri = image.uri,
+                    destinationFolderUri = destinationFolderUri,
+                    displayName = image.displayName
+                )
+            }
 
             when (result) {
                 is MoveResult.Moved -> {
