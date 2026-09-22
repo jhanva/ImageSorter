@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
@@ -54,10 +55,12 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.smartfolder.R
+import com.smartfolder.domain.model.Folder
 import com.smartfolder.domain.model.ImageInfo
 import com.smartfolder.presentation.components.EmptyState
 import com.smartfolder.presentation.components.ErrorBanner
@@ -333,7 +336,7 @@ private fun DestinationButtons(
     onDelete: () -> Unit
 ) {
     // Density adapts to the folder count so up to 16 destinations stay
-    // visible without scrolling; positions stay fixed for muscle memory.
+    // visible without scrolling.
     val count = uiState.destinations.size
     val columns = when {
         count <= 4 -> 2
@@ -341,8 +344,17 @@ private fun DestinationButtons(
         else -> 4
     }
     val buttonHeight = if (count <= 6) 52.dp else 48.dp
-    val visibleRows = ((count + columns - 1) / columns).coerceIn(1, 4)
-    val gridHeight = buttonHeight * visibleRows + 8.dp * (visibleRows - 1)
+    val used = uiState.usedDestinations
+    val others = uiState.otherDestinations
+    // Used destinations are pinned to the top, so with a long folder list the
+    // ones in play stay reachable without scrolling up and down.
+    val showSections = used.isNotEmpty() && others.isNotEmpty()
+    val usedRows = (used.size + columns - 1) / columns
+    val otherRows = (others.size + columns - 1) / columns
+    val totalRows = (usedRows + otherRows).coerceAtLeast(1)
+    val visibleRows = totalRows.coerceIn(1, 4)
+    val headerHeight = if (showSections) 36.dp else 0.dp
+    val gridHeight = buttonHeight * visibleRows + 8.dp * (visibleRows - 1) + headerHeight
 
     Column(
         modifier = Modifier.padding(bottom = 12.dp),
@@ -354,24 +366,33 @@ private fun DestinationButtons(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.heightIn(max = gridHeight)
         ) {
-            items(uiState.destinations, key = { it.id }) { destination ->
-                Button(
-                    onClick = { onMove(destination.id) },
-                    enabled = !uiState.isBusy,
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
-                    modifier = Modifier.heightIn(min = buttonHeight)
-                ) {
-                    Text(
-                        text = destination.displayName,
-                        style = if (columns == 4) {
-                            MaterialTheme.typography.labelMedium
-                        } else {
-                            MaterialTheme.typography.labelLarge
-                        },
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+            if (showSections) {
+                item(key = "header_used", span = { GridItemSpan(maxLineSpan) }) {
+                    DestinationSectionLabel(stringResource(R.string.triage_destinations_used))
                 }
+            }
+            items(used, key = { "used_${it.id}" }) { destination ->
+                DestinationButton(
+                    destination = destination,
+                    columns = columns,
+                    buttonHeight = buttonHeight,
+                    enabled = !uiState.isBusy,
+                    onMove = onMove
+                )
+            }
+            if (showSections) {
+                item(key = "header_others", span = { GridItemSpan(maxLineSpan) }) {
+                    DestinationSectionLabel(stringResource(R.string.triage_destinations_others))
+                }
+            }
+            items(others, key = { "other_${it.id}" }) { destination ->
+                DestinationButton(
+                    destination = destination,
+                    columns = columns,
+                    buttonHeight = buttonHeight,
+                    enabled = !uiState.isBusy,
+                    onMove = onMove
+                )
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -403,6 +424,43 @@ private fun DestinationButtons(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun DestinationSectionLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
+    )
+}
+
+@Composable
+private fun DestinationButton(
+    destination: Folder,
+    columns: Int,
+    buttonHeight: Dp,
+    enabled: Boolean,
+    onMove: (Long) -> Unit
+) {
+    Button(
+        onClick = { onMove(destination.id) },
+        enabled = enabled,
+        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
+        modifier = Modifier.heightIn(min = buttonHeight)
+    ) {
+        Text(
+            text = destination.displayName,
+            style = if (columns == 4) {
+                MaterialTheme.typography.labelMedium
+            } else {
+                MaterialTheme.typography.labelLarge
+            },
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

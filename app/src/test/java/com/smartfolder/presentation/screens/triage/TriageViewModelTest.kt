@@ -447,4 +447,93 @@ class TriageViewModelTest {
         assertNull(state.current)
         assertNotNull(state.movedByDestination[destinationA.id])
     }
+
+    @Test
+    fun `unused destinations are listed alphabetically`() = runTest(mainDispatcherRule.dispatcher) {
+        setupHappyPath(listOf(image(1L)))
+
+        val vm = viewModel()
+        val state = awaitState(vm) { !it.isLoading }
+
+        assertEquals(listOf("Familia", "Memes"), state.otherDestinations.map { it.displayName })
+        assertTrue(state.usedDestinations.isEmpty())
+    }
+
+    @Test
+    fun `moving promotes the destination to the used group`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val first = image(1L)
+            setupHappyPath(listOf(first, image(2L)))
+            `when`(moveImagesUseCase.invoke(listOf(first), destinationA.uri))
+                .thenReturn(moveReport(first, TestUri("content://destA/img1")))
+
+            val vm = viewModel()
+            awaitState(vm) { !it.isLoading }
+
+            vm.moveTo(destinationA.id)
+            val state = awaitState(vm) { it.movedCount == 1 }
+
+            assertEquals(listOf("Memes"), state.usedDestinations.map { it.displayName })
+            assertEquals(listOf("Familia"), state.otherDestinations.map { it.displayName })
+        }
+
+    @Test
+    fun `used destinations keep alphabetical order among themselves`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val first = image(1L)
+            val second = image(2L)
+            setupHappyPath(listOf(first, second))
+            `when`(moveImagesUseCase.invoke(listOf(first), destinationA.uri))
+                .thenReturn(moveReport(first, TestUri("content://destA/img1")))
+            `when`(moveImagesUseCase.invoke(listOf(second), destinationB.uri))
+                .thenReturn(moveReport(second, TestUri("content://destB/img2")))
+
+            val vm = viewModel()
+            awaitState(vm) { !it.isLoading }
+
+            vm.moveTo(destinationA.id)
+            awaitState(vm) { it.movedCount == 1 }
+            vm.moveTo(destinationB.id)
+            val state = awaitState(vm) { it.movedCount == 2 }
+
+            // Memes was used first, but the group stays alphabetical.
+            assertEquals(listOf("Familia", "Memes"), state.usedDestinations.map { it.displayName })
+            assertTrue(state.otherDestinations.isEmpty())
+        }
+
+    @Test
+    fun `undoing the only move demotes the destination`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val first = image(1L)
+            setupHappyPath(listOf(first, image(2L)))
+            `when`(moveImagesUseCase.invoke(listOf(first), destinationA.uri))
+                .thenReturn(moveReport(first, TestUri("content://destA/img1")))
+            `when`(undoMoveUseCase.invoke(anyList()))
+                .thenReturn(UndoMoveUseCase.UndoReport(restored = 1, failed = 0, errors = emptyList()))
+
+            val vm = viewModel()
+            awaitState(vm) { !it.isLoading }
+            vm.moveTo(destinationA.id)
+            awaitState(vm) { it.movedCount == 1 }
+
+            vm.undoLast()
+            val state = awaitState(vm) { it.movedCount == 0 }
+
+            assertTrue(state.usedDestinations.isEmpty())
+            assertEquals(listOf("Familia", "Memes"), state.otherDestinations.map { it.displayName })
+        }
+
+    @Test
+    fun `destinations used in a previous session start promoted`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            setupHappyPath(listOf(image(1L)))
+            `when`(positionStore.getUsedDestinations(sourceFolder.id))
+                .thenReturn(setOf(destinationB.id))
+
+            val vm = viewModel()
+            val state = awaitState(vm) { !it.isLoading }
+
+            assertEquals(listOf("Familia"), state.usedDestinations.map { it.displayName })
+            assertEquals(listOf("Memes"), state.otherDestinations.map { it.displayName })
+        }
 }

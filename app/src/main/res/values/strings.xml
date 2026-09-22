@@ -44,6 +44,8 @@
     <!-- Triage -->
     <string name="triage_title">Sort images</string>
     <string name="triage_progress">%1$d left - %2$d moved</string>
+    <string name="triage_destinations_used">Used</string>
+    <string name="triage_destinations_others">All folders</string>
     <string name="triage_skip">Skip</string>
     <string name="triage_delete">Delete</string>
     <string name="triage_nav_previous">Previous image</string>

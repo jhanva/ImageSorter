@@ -44,6 +44,8 @@
     <!-- Triage -->
     <string name="triage_title">Clasificar imagenes</string>
     <string name="triage_progress">%1$d restantes - %2$d movidas</string>
+    <string name="triage_destinations_used">Usadas</string>
+    <string name="triage_destinations_others">Todas las carpetas</string>
     <string name="triage_skip">Omitir</string>
     <string name="triage_delete">Eliminar</string>
     <string name="triage_nav_previous">Imagen anterior</string>
