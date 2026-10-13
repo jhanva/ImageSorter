@@ -39,7 +39,8 @@ class ListDestinationFoldersUseCase @Inject constructor(
                     uri = directFileOps.uriFor(dir),
                     displayName = option.displayName,
                     role = FolderRole.DESTINATION,
-                    imageCount = option.imageCount
+                    imageCount = option.imageCount,
+                    coverUri = option.coverUri
                 )
             }
             .distinctBy { it.uri.toString() }

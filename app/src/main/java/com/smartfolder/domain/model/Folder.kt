@@ -9,7 +9,9 @@ data class Folder(
     val role: FolderRole,
     val imageCount: Int = 0,
     val indexedCount: Int = 0,
-    val lastIndexedAt: Long? = null
+    val lastIndexedAt: Long? = null,
+    /** Image shown as the folder thumbnail in the triage grid, if known. */
+    val coverUri: Uri? = null
 )
 
 /**

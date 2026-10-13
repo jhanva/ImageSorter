@@ -96,6 +96,8 @@ class MediaStoreFolderProvider @Inject constructor(
         }
 
         val projection = arrayOf(
+            MediaStore.Images.Media._ID,
+            MediaStore.Images.Media.DATE_MODIFIED,
             MediaStore.Images.Media.BUCKET_DISPLAY_NAME,
             MediaStore.Images.Media.RELATIVE_PATH,
             MediaStore.Images.Media.DATA
@@ -109,6 +111,8 @@ class MediaStoreFolderProvider @Inject constructor(
             null,
             null
         )?.use { cursor ->
+            val idCol = cursor.getColumnIndex(MediaStore.Images.Media._ID)
+            val modifiedCol = cursor.getColumnIndex(MediaStore.Images.Media.DATE_MODIFIED)
             val bucketCol = cursor.getColumnIndex(MediaStore.Images.Media.BUCKET_DISPLAY_NAME)
             val relativeCol = cursor.getColumnIndex(MediaStore.Images.Media.RELATIVE_PATH)
             val dataCol = cursor.getColumnIndex(MediaStore.Images.Media.DATA)
@@ -132,6 +136,16 @@ class MediaStoreFolderProvider @Inject constructor(
                     entry.absolutePath = folderPathOf(absolutePath, relativePath)
                 }
                 entry.imageCount += 1
+
+                // The newest image becomes the folder cover, as in the system
+                // gallery. Picked in this same pass so no extra query is needed.
+                if (idCol >= 0) {
+                    val modified = if (modifiedCol >= 0) cursor.getLong(modifiedCol) else 0L
+                    if (entry.coverId == null || modified > entry.coverModified) {
+                        entry.coverId = cursor.getLong(idCol)
+                        entry.coverModified = modified
+                    }
+                }
             }
         }
 
@@ -141,7 +155,8 @@ class MediaStoreFolderProvider @Inject constructor(
                     displayName = folder.displayName,
                     documentId = docId,
                     imageCount = folder.imageCount,
-                    absolutePath = folder.absolutePath
+                    absolutePath = folder.absolutePath,
+                    coverUri = folder.coverId?.let { ContentUris.withAppendedId(collection, it) }
                 )
             }
             .sortedWith(compareByDescending<ImageFolderOption> { it.imageCount }.thenBy { it.displayName.lowercase() })
@@ -205,6 +220,8 @@ class MediaStoreFolderProvider @Inject constructor(
     private data class MutableFolder(
         val displayName: String,
         var imageCount: Int,
-        var absolutePath: String = ""
+        var absolutePath: String = "",
+        var coverId: Long? = null,
+        var coverModified: Long = 0L
     )
 }

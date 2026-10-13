@@ -87,4 +87,19 @@ class ListDestinationFoldersUseCaseTest {
 
         assertEquals(listOf("Memes"), destinations.map { it.displayName })
     }
+
+    @Test
+    fun `carries the folder cover image to the destination`() = runTest {
+        val cover = TestUri("content://media/external/images/media/42")
+        given(
+            listOf(
+                option("Memes", "/storage/emulated/0/Pictures/Memes").copy(coverUri = cover),
+                option("Familia", "/storage/emulated/0/Pictures/Familia")
+            )
+        )
+
+        val destinations = useCase(source)
+
+        assertEquals(listOf(cover, null), destinations.map { it.coverUri })
+    }
 }

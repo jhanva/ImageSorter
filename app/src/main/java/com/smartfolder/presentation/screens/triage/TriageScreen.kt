@@ -1,5 +1,7 @@
 package com.smartfolder.presentation.screens.triage
 
+import android.net.Uri
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -9,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -35,6 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -46,6 +50,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -53,6 +60,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -464,6 +472,23 @@ private fun DestinationButton(
     enabled: Boolean,
     onMove: (String) -> Unit
 ) {
+    val labelStyle = if (columns == 4) {
+        MaterialTheme.typography.labelMedium
+    } else {
+        MaterialTheme.typography.labelLarge
+    }
+    val coverUri = destination.coverUri
+    if (coverUri != null) {
+        DestinationCoverButton(
+            destination = destination,
+            coverUri = coverUri,
+            labelStyle = labelStyle,
+            buttonHeight = buttonHeight,
+            enabled = enabled,
+            onMove = onMove
+        )
+        return
+    }
     Button(
         onClick = { onMove(destination.key) },
         enabled = enabled,
@@ -472,16 +497,78 @@ private fun DestinationButton(
     ) {
         Text(
             text = destination.displayName,
-            style = if (columns == 4) {
-                MaterialTheme.typography.labelMedium
-            } else {
-                MaterialTheme.typography.labelLarge
-            },
+            style = labelStyle,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
     }
 }
+
+/**
+ * A destination drawn over its most recent image, so folders with similar
+ * names can be told apart at a glance. Same size and tap target as the plain
+ * button; only the look changes.
+ */
+@Composable
+private fun DestinationCoverButton(
+    destination: Folder,
+    coverUri: Uri,
+    labelStyle: TextStyle,
+    buttonHeight: Dp,
+    enabled: Boolean,
+    onMove: (String) -> Unit
+) {
+    val context = LocalContext.current
+    val request = remember(coverUri) {
+        ImageRequest.Builder(context)
+            .data(coverUri)
+            .size(COVER_THUMBNAIL_PX)
+            .crossfade(true)
+            .build()
+    }
+    Surface(
+        onClick = { onMove(destination.key) },
+        enabled = enabled,
+        shape = ButtonDefaults.shape,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(buttonHeight)
+            .alpha(if (enabled) 1f else DISABLED_ALPHA)
+    ) {
+        Box {
+            AsyncImage(
+                model = request,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0f to Color.Black.copy(alpha = 0.1f),
+                            1f to Color.Black.copy(alpha = 0.75f)
+                        )
+                    )
+            )
+            Text(
+                text = destination.displayName,
+                style = labelStyle,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(horizontal = 6.dp, vertical = 4.dp)
+            )
+        }
+    }
+}
+
+private const val COVER_THUMBNAIL_PX = 256
+private const val DISABLED_ALPHA = 0.38f
 
 @Composable
 private fun TriageSummary(
